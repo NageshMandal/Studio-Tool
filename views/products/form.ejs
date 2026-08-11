@@ -1,0 +1,135 @@
+<section class="panel panel-form">
+  <div class="panel-head">
+    <h2><%= isEdit ? 'Edit instrument' : 'New instrument' %></h2>
+    <a class="btn btn-ghost" href="/admin/products">Back to list</a>
+  </div>
+
+  <% if (error) { %>
+    <div class="alert alert-error"><%= error %></div>
+  <% } %>
+
+  <% if (isEdit && product.assetTag) { %>
+    <p class="hint">Asset tag <span class="asset-tag"><%= product.assetTag %></span> stays with this item for life.</p>
+  <% } else { %>
+    <p class="hint">An asset tag is generated automatically when you save.</p>
+  <% } %>
+
+  <form method="POST" action="<%= formAction %>">
+    <div class="grid-2">
+      <label class="field">
+        <span>Instrument name</span>
+        <input type="text" name="name" value="<%= product.name || '' %>" placeholder="Sony FX3 body" required />
+      </label>
+
+      <label class="field">
+        <span>Category</span>
+        <select name="category">
+          <% categories.forEach(function (c) { %>
+            <option value="<%= c %>" <%= product.category === c ? 'selected' : '' %>><%= c %></option>
+          <% }); %>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Brand</span>
+        <input type="text" name="brand" value="<%= product.brand || '' %>" placeholder="Sony" />
+      </label>
+
+      <label class="field">
+        <span>Model</span>
+        <input type="text" name="model" value="<%= product.model || '' %>" placeholder="ILME-FX3" />
+      </label>
+
+      <label class="field">
+        <span>Serial number</span>
+        <input type="text" name="serialNumber" value="<%= product.serialNumber || '' %>" />
+      </label>
+
+      <label class="field">
+        <span>Quantity</span>
+        <input type="number" name="quantity" min="0" value="<%= product.quantity != null ? product.quantity : 1 %>" />
+      </label>
+
+      <label class="field">
+        <span>Condition</span>
+        <select name="condition">
+          <% conditions.forEach(function (c) { %>
+            <option value="<%= c %>" <%= product.condition === c ? 'selected' : '' %>><%= c.replace('-', ' ') %></option>
+          <% }); %>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Status</span>
+        <select name="status">
+          <% statuses.forEach(function (s) { %>
+            <option value="<%= s %>" <%= product.status === s ? 'selected' : '' %>><%= s %></option>
+          <% }); %>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Assign to</span>
+        <select name="assignedTo">
+          <option value="">Keep in store</option>
+          <% users.forEach(function (u) { %>
+            <option value="<%= u._id %>" <%= String(product.assignedTo && product.assignedTo._id ? product.assignedTo._id : product.assignedTo) === String(u._id) ? 'selected' : '' %>>
+              <%= u.name %> — <%= u.department %>
+            </option>
+          <% }); %>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Taken for</span>
+        <input type="text" name="reason" maxlength="120"
+               value="<%= product.occupyReason || '' %>" placeholder="Client shoot" />
+        <span class="field-note">Recorded in the usage log when you hand this item to someone.</span>
+      </label>
+
+      <label class="field">
+        <span>Location</span>
+        <input type="text" name="location" value="<%= product.location || '' %>" placeholder="Main studio" />
+      </label>
+
+      <label class="field">
+        <span>Purchase date</span>
+        <input type="date" name="purchaseDate"
+               value="<%= product.purchaseDate ? new Date(product.purchaseDate).toISOString().slice(0, 10) : '' %>" />
+      </label>
+
+      <label class="field">
+        <span>Price per unit (₹)</span>
+        <input type="number" name="price" min="0" step="0.01" value="<%= product.price || 0 %>" />
+      </label>
+
+      <label class="field span-2">
+        <span>Image URL</span>
+        <input type="url" name="imageUrl" id="imageUrl" value="<%= product.imageUrl || '' %>" placeholder="https://…" />
+        <span class="field-note">Shown on the dashboard, the instrument list and inside the Telegram bot.</span>
+      </label>
+
+      <div class="field span-2 preview-row">
+        <span>Preview</span>
+        <div class="preview-box" id="imagePreview">
+          <% if (product.imageUrl) { %>
+            <img src="<%= product.imageUrl %>" alt="<%= product.name || 'Instrument' %>"
+                 onerror="this.parentNode.innerHTML='<span class=\'preview-empty\'>That image could not be loaded</span>';" />
+          <% } else { %>
+            <span class="preview-empty">No image yet</span>
+          <% } %>
+        </div>
+      </div>
+
+      <label class="field span-2">
+        <span>Notes</span>
+        <textarea name="notes" rows="3" placeholder="Scratch on the lens mount, kept in case 2"><%= product.notes || '' %></textarea>
+      </label>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><%= isEdit ? 'Save changes' : 'Add instrument' %></button>
+      <a class="btn btn-ghost" href="/admin/products">Cancel</a>
+    </div>
+  </form>
+</section>

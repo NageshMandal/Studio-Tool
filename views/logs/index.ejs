@@ -1,0 +1,97 @@
+<section class="daybar">
+  <a class="btn btn-ghost" href="/admin/logs?date=<%= prevDate %>">← <%= prevDate %></a>
+  <form class="filters" method="GET" action="/admin/logs">
+    <input type="date" name="date" value="<%= date %>" max="<%= maxDate %>" />
+    <input type="search" name="q" value="<%= query.q %>" placeholder="Item, tag or person…" />
+    <button class="btn btn-ghost" type="submit">Show</button>
+    <a class="btn btn-ghost" href="/admin/logs">Today</a>
+  </form>
+  <% if (date < maxDate) { %>
+    <a class="btn btn-ghost" href="/admin/logs?date=<%= nextDate %>"><%= nextDate %> →</a>
+  <% } else { %>
+    <span class="btn btn-ghost is-disabled">Latest</span>
+  <% } %>
+</section>
+
+<section class="stat-grid">
+  <div class="stat">
+    <span class="stat-label">Taken out</span>
+    <span class="stat-value"><%= summary.startedToday %></span>
+    <span class="stat-note"><%= isToday ? 'so far today' : 'on this day' %></span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Returned</span>
+    <span class="stat-value"><%= summary.returnedToday %></span>
+    <span class="stat-note">Submitted back</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Still out</span>
+    <span class="stat-value"><%= summary.stillOut %></span>
+    <span class="stat-note">Not returned yet</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Time in use</span>
+    <span class="stat-value"><%= summary.totalHours %>h</span>
+    <span class="stat-note">
+      <% if (summary.busiest) { %>Busiest: <%= summary.busiest.name %><% } else { %>No activity<% } %>
+    </span>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Movements on <%= date %></h2>
+  </div>
+
+  <% if (logs.length === 0) { %>
+    <div class="empty">
+      <p>Nothing was taken out or returned on this day.</p>
+    </div>
+  <% } else { %>
+    <table class="table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Instrument</th>
+          <th>Person</th>
+          <th>Taken for</th>
+          <th>Taken at</th>
+          <th>Returned at</th>
+          <th>Held for</th>
+          <th>Via</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% logs.forEach(function (log) { %>
+          <tr class="<%= log.returnedAt ? '' : 'row-open' %>">
+            <td class="thumb-cell">
+              <%- include('../partials/thumb', { thumbUrl: log.imageUrl, thumbName: log.productName }) %>
+            </td>
+            <td>
+              <span class="row-title"><%= log.productName %></span>
+              <span class="row-sub"><span class="asset-tag"><%= log.assetTag %></span></span>
+            </td>
+            <td><%= log.userName %></td>
+            <td><%= log.reason || '—' %></td>
+            <td><%= formatWhen(log.occupiedAt) %></td>
+            <td>
+              <% if (log.returnedAt) { %>
+                <%= formatWhen(log.returnedAt) %>
+              <% } else { %>
+                <span class="pill pill-assigned">still out</span>
+              <% } %>
+            </td>
+            <td>
+              <% if (log.returnedAt) { %>
+                <%= formatDuration(log.durationMinutes) %>
+              <% } else { %>
+                <%= formatSince(log.occupiedAt) %> so far
+              <% } %>
+            </td>
+            <td><span class="pill"><%= log.source %></span></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</section>

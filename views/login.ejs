@@ -1,0 +1,33 @@
+<div class="auth-card">
+  <div class="auth-side">
+    <span class="brand-mark big">SI</span>
+    <h2>Studio<br />Inventory</h2>
+    <p>Track every camera, light and cable in the office — and who is holding it.</p>
+    <span class="tag-strip">STU-0001</span>
+  </div>
+
+  <div class="auth-form">
+    <p class="eyebrow">Admin access</p>
+    <h1>Sign in</h1>
+
+    <% if (error) { %>
+      <div class="alert alert-error"><%= error %></div>
+    <% } %>
+
+    <form method="POST" action="/login" novalidate>
+      <label class="field">
+        <span>Email</span>
+        <input type="email" name="email" value="<%= email %>" placeholder="admin@office.com" required autofocus />
+      </label>
+
+      <label class="field">
+        <span>Password</span>
+        <input type="password" name="password" placeholder="••••••••" required />
+      </label>
+
+      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+    </form>
+
+    <p class="hint">Credentials come from your <code>.env</code> file.</p>
+  </div>
+</div>

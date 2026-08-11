@@ -1,0 +1,81 @@
+<% if (message) { %>
+  <div class="alert alert-info"><%= message %></div>
+<% } %>
+
+<section class="panel">
+  <div class="panel-head">
+    <form class="filters" method="GET" action="/admin/users">
+      <input type="search" name="q" value="<%= query.q %>" placeholder="Search name, email, ID…" />
+      <select name="department">
+        <option value="">All departments</option>
+        <% departments.forEach(function (d) { %>
+          <option value="<%= d %>" <%= query.department === d ? 'selected' : '' %>><%= d %></option>
+        <% }); %>
+      </select>
+      <select name="status">
+        <option value="">Any status</option>
+        <option value="active" <%= query.status === 'active' ? 'selected' : '' %>>Active</option>
+        <option value="inactive" <%= query.status === 'inactive' ? 'selected' : '' %>>Inactive</option>
+      </select>
+      <button class="btn btn-ghost" type="submit">Filter</button>
+      <a class="btn btn-ghost" href="/admin/users">Reset</a>
+    </form>
+
+    <a class="btn btn-primary" href="/admin/users/new">Add person</a>
+  </div>
+
+  <% if (users.length === 0) { %>
+    <div class="empty">
+      <p>No people match this view.</p>
+      <a class="btn btn-primary" href="/admin/users/new">Add person</a>
+    </div>
+  <% } else { %>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Person</th>
+          <th>Employee ID</th>
+          <th>Department</th>
+          <th>Phone</th>
+          <th>Holding</th>
+          <th>Status</th>
+          <th>Added</th>
+          <th class="right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% users.forEach(function (u) { %>
+          <tr>
+            <td>
+              <a class="row-title" href="/admin/users/<%= u._id %>/edit"><%= u.name %></a>
+              <span class="row-sub"><%= u.email %></span>
+            </td>
+            <td><span class="asset-tag"><%= u.employeeId || '—' %></span></td>
+            <td><%= u.department %><% if (u.designation) { %><span class="row-sub"><%= u.designation %></span><% } %></td>
+            <td><%= u.phone || '—' %></td>
+            <td><%= u.itemsHeld %> item<%= u.itemsHeld === 1 ? '' : 's' %></td>
+            <td><span class="pill pill-<%= u.status %>"><%= u.status %></span></td>
+            <td><%= formatDate(u.createdAt) %></td>
+            <td class="right nowrap">
+              <a class="btn btn-small" href="/admin/users/<%= u._id %>/edit">Edit</a>
+
+              <form class="inline" method="POST" action="/admin/users/<%= u._id %>/status?_method=PATCH">
+                <button class="btn btn-small" type="submit"><%= u.status === 'active' ? 'Deactivate' : 'Activate' %></button>
+              </form>
+
+              <form class="inline pw-form" method="POST" action="/admin/users/<%= u._id %>/password?_method=PATCH">
+                <input class="pw-input" type="password" name="password" placeholder="New password" minlength="6" required />
+                <button class="btn btn-small" type="submit">Set</button>
+              </form>
+
+              <form class="inline" method="POST" action="/admin/users/<%= u._id %>?_method=DELETE"
+                    onsubmit="return confirm('Remove <%= u.name %>? Their instruments go back to store.');">
+                <button class="btn btn-small btn-danger" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</section>

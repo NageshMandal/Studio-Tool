@@ -1,0 +1,121 @@
+<section class="stat-grid">
+  <div class="stat">
+    <span class="stat-label">Instruments logged</span>
+    <span class="stat-value"><%= stats.totalItems %></span>
+    <span class="stat-note"><%= stats.totalUnits %> units in total</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">People on record</span>
+    <span class="stat-value"><%= stats.totalUsers %></span>
+    <span class="stat-note">Studio staff accounts</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Currently assigned</span>
+    <span class="stat-value"><%= stats.assignedItems %></span>
+    <span class="stat-note">Out with a team member</span>
+  </div>
+  <div class="stat stat-alert">
+    <span class="stat-label">Needs repair</span>
+    <span class="stat-value"><%= stats.repairItems %></span>
+    <span class="stat-note">Flagged in last check</span>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Out right now</h2>
+    <a class="btn btn-ghost" href="/admin/logs">Open today's log</a>
+  </div>
+
+  <p class="hint">
+    <%= stats.takenToday %> taken out today · <%= stats.returnedToday %> returned ·
+    <%= stats.linkedUsers %> of <%= stats.totalUsers %> people signed in to the bot
+  </p>
+
+  <% if (outNow.length === 0) { %>
+    <div class="empty">
+      <p>Everything is on the shelf.</p>
+    </div>
+  <% } else { %>
+    <table class="table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Asset tag</th>
+          <th>Instrument</th>
+          <th>Occupied by</th>
+          <th>Taken for</th>
+          <th>Since</th>
+          <th>Held for</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% outNow.forEach(function (item) { %>
+          <tr class="row-open">
+            <td class="thumb-cell">
+              <%- include('partials/thumb', { thumbUrl: item.imageUrl, thumbName: item.name }) %>
+            </td>
+            <td><span class="asset-tag"><%= item.assetTag %></span></td>
+            <td><a class="row-title" href="/admin/products/<%= item._id %>/edit"><%= item.name %></a></td>
+            <td><%= item.assignedTo ? item.assignedTo.name : '—' %></td>
+            <td><%= item.occupyReason || '—' %></td>
+            <td><%= formatWhen(item.occupiedAt) %></td>
+            <td><%= formatSince(item.occupiedAt) %></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Recently added</h2>
+    <a class="btn btn-primary" href="/admin/products/new">Add instrument</a>
+  </div>
+
+  <% if (recent.length === 0) { %>
+    <div class="empty">
+      <p>Nothing logged yet. Add your first instrument to start the register.</p>
+      <a class="btn btn-primary" href="/admin/products/new">Add instrument</a>
+    </div>
+  <% } else { %>
+    <table class="table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Asset tag</th>
+          <th>Instrument</th>
+          <th>Category</th>
+          <th>Held by</th>
+          <th>Added</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% recent.forEach(function (item) { %>
+          <tr>
+            <td class="thumb-cell">
+              <%- include('partials/thumb', { thumbUrl: item.imageUrl, thumbName: item.name }) %>
+            </td>
+            <td><span class="asset-tag"><%= item.assetTag %></span></td>
+            <td>
+              <a class="row-title" href="/admin/products/<%= item._id %>/edit"><%= item.name %></a>
+              <span class="row-sub"><%= item.brand || '' %> <%= item.model || '' %></span>
+            </td>
+            <td><%= item.category %></td>
+            <td><%= item.assignedTo ? item.assignedTo.name : 'In store' %></td>
+            <td><%= formatDate(item.createdAt) %></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Register value</h2>
+  </div>
+  <p class="big-figure"><%= formatMoney(stats.totalValue) %></p>
+  <p class="hint">Purchase price × quantity, across everything on the register.</p>
+</section>

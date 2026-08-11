@@ -1,0 +1,68 @@
+<section class="panel panel-form">
+  <div class="panel-head">
+    <h2><%= isEdit ? 'Edit person' : 'New person' %></h2>
+    <a class="btn btn-ghost" href="/admin/users">Back to list</a>
+  </div>
+
+  <% if (error) { %>
+    <div class="alert alert-error"><%= error %></div>
+  <% } %>
+
+  <form method="POST" action="<%= formAction %>">
+    <div class="grid-2">
+      <label class="field">
+        <span>Full name</span>
+        <input type="text" name="name" value="<%= user.name || '' %>" placeholder="Ravi Kumar" required />
+      </label>
+
+      <label class="field">
+        <span>Email</span>
+        <input type="email" name="email" value="<%= user.email || '' %>" placeholder="ravi@office.com" required />
+      </label>
+
+      <label class="field">
+        <span><%= isEdit ? 'New password' : 'Password' %></span>
+        <input type="password" name="password" minlength="6"
+               placeholder="<%= isEdit ? 'Leave blank to keep the current one' : 'At least 6 characters' %>"
+               <%= isEdit ? '' : 'required' %> />
+      </label>
+
+      <label class="field">
+        <span>Employee ID</span>
+        <input type="text" name="employeeId" value="<%= user.employeeId || '' %>" placeholder="EMP-014" />
+      </label>
+
+      <label class="field">
+        <span>Phone</span>
+        <input type="tel" name="phone" value="<%= user.phone || '' %>" placeholder="+91 90000 00000" />
+      </label>
+
+      <label class="field">
+        <span>Department</span>
+        <select name="department">
+          <% departments.forEach(function (d) { %>
+            <option value="<%= d %>" <%= user.department === d ? 'selected' : '' %>><%= d %></option>
+          <% }); %>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Designation</span>
+        <input type="text" name="designation" value="<%= user.designation || '' %>" placeholder="Camera operator" />
+      </label>
+
+      <label class="field">
+        <span>Status</span>
+        <select name="status">
+          <option value="active" <%= user.status === 'active' ? 'selected' : '' %>>Active</option>
+          <option value="inactive" <%= user.status === 'inactive' ? 'selected' : '' %>>Inactive</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><%= isEdit ? 'Save changes' : 'Add person' %></button>
+      <a class="btn btn-ghost" href="/admin/users">Cancel</a>
+    </div>
+  </form>
+</section>

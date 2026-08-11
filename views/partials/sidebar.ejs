@@ -1,0 +1,27 @@
+<aside class="sidebar">
+  <div class="brand">
+    <span class="brand-mark">SI</span>
+    <span class="brand-text">
+      Studio<br /><strong>Inventory</strong>
+    </span>
+  </div>
+
+  <nav class="nav">
+    <a class="nav-link <%= active === 'dashboard' ? 'is-active' : '' %>" href="/admin/dashboard">
+      <span class="nav-dot"></span> Dashboard
+    </a>
+    <a class="nav-link <%= active === 'products' ? 'is-active' : '' %>" href="/admin/products">
+      <span class="nav-dot"></span> Instruments
+    </a>
+    <a class="nav-link <%= active === 'users' ? 'is-active' : '' %>" href="/admin/users">
+      <span class="nav-dot"></span> People
+    </a>
+    <a class="nav-link <%= active === 'logs' ? 'is-active' : '' %>" href="/admin/logs">
+      <span class="nav-dot"></span> Usage log
+    </a>
+  </nav>
+
+  <div class="sidebar-foot">
+    <p>Every item carries a printable asset tag.</p>
+  </div>
+</aside>

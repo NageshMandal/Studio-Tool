@@ -1,0 +1,12 @@
+<%
+  // thumbUrl / thumbName are set by the including view
+  var _url = typeof thumbUrl !== 'undefined' ? thumbUrl : null;
+  var _name = typeof thumbName !== 'undefined' && thumbName ? thumbName : '?';
+%>
+<span class="thumb">
+  <% if (_url) { %>
+    <img src="<%= _url %>" alt="<%= _name %>" loading="lazy"
+         onerror="this.closest('.thumb').classList.add('thumb-failed'); this.remove();" />
+  <% } %>
+  <span class="thumb-fallback"><%= _name.trim().charAt(0).toUpperCase() %></span>
+</span>
