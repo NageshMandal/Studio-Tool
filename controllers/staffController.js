@@ -1,0 +1,280 @@
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+const Product = require('../models/Product');
+const AssignmentRequest = require('../models/AssignmentRequest');
+const Booking = require('../models/Booking');
+const { occupyProduct, releaseProduct } = require('../services/occupancy');
+const { createBooking } = require('../services/booking');
+const { notifyAdmins } = require('../bot/notify');
+const { escapeHtml, todayKey, formatDay } = require('../utils/format');
+const { STAFF_COOKIE } = require('../middleware/staffAuth');
+
+/**
+ * The staff website: the same rules as the Telegram bot, in a browser.
+ *
+ * Staff sign in with the email + password from the People page. They can
+ * view every tool, occupy (power accounts) or request (normal accounts),
+ * return what they hold, and book an item for a future date.
+ */
+
+const back = (res, message) => res.redirect(`/staff?message=${encodeURIComponent(message)}`);
+
+// GET /staff/login
+exports.loginForm = (req, res) => {
+  res.render('staff/login', {
+    title: 'Staff sign in',
+    layout: 'auth-layout',
+    error: req.query.error || null,
+    email: '',
+  });
+};
+
+// POST /staff/login
+exports.login = async (req, res) => {
+  const { email, password } = req.body;
+  const fail = () =>
+    res.status(401).render('staff/login', {
+      title: 'Staff sign in',
+      layout: 'auth-layout',
+      error: 'Email or password did not match',
+      email: email || '',
+    });
+
+  try {
+    const user = await User.findOne({ email: (email || '').toLowerCase().trim() }).select('+password');
+    if (!user || user.status !== 'active') return fail();
+    if (!(await user.matchPassword(password || ''))) return fail();
+
+    const token = jwt.sign({ id: user._id, role: 'staff' }, process.env.JWT_SECRET, {
+      expiresIn: '7d',
+    });
+    res.cookie(STAFF_COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    res.redirect('/staff');
+  } catch (err) {
+    fail();
+  }
+};
+
+// POST /staff/logout
+exports.logout = (req, res) => {
+  res.clearCookie(STAFF_COOKIE);
+  res.redirect('/staff/login');
+};
+
+// GET /staff — the portal
+exports.portal = async (req, res, next) => {
+  try {
+    const user = req.staff;
+
+    const products = await Product.find().sort({ category: 1, name: 1 }).lean();
+
+    // Names of everyone holding something, for the status lines
+    const holderIds = [...new Set(products.filter((p) => p.assignedTo).map((p) => String(p.assignedTo)))];
+    const holders = holderIds.length
+      ? await User.find({ _id: { $in: holderIds } }, 'name').lean()
+      : [];
+    const holderMap = holders.reduce((acc, h) => ({ ...acc, [String(h._id)]: h.name }), {});
+
+    const myItems = products.filter((p) => p.assignedTo && String(p.assignedTo) === String(user._id));
+    const myRequests = await AssignmentRequest.find({ user: user._id, status: 'pending' })
+      .sort({ createdAt: -1 })
+      .lean();
+    const myBookings = await Booking.find({
+      user: user._id,
+      status: { $in: ['pending', 'confirmed'] },
+      bookedFor: { $gte: todayKey() },
+    })
+      .sort({ bookedFor: 1 })
+      .lean();
+
+    // My open requests by product, so the buttons match the bot's behaviour
+    const pendingByProduct = myRequests.reduce(
+      (acc, r) => ({ ...acc, [String(r.product)]: r }),
+      {}
+    );
+
+    // Today's confirmed bookings, so a reserved item says so
+    const bookedToday = await Booking.find({ status: 'confirmed', bookedFor: todayKey() }).lean();
+    const bookedTodayByProduct = bookedToday.reduce(
+      (acc, b) => ({ ...acc, [String(b.product)]: b }),
+      {}
+    );
+
+    // Group by category for the catalog
+    const groups = [];
+    const groupMap = new Map();
+    products.forEach((p) => {
+      if (!groupMap.has(p.category)) {
+        const g = { category: p.category, items: [] };
+        groupMap.set(p.category, g);
+        groups.push(g);
+      }
+      groupMap.get(p.category).items.push(p);
+    });
+
+    res.render('staff/portal', {
+      title: 'Studio tools',
+      layout: 'staff/layout',
+      user,
+      groups,
+      holderMap,
+      myItems,
+      myRequests,
+      myBookings,
+      pendingByProduct,
+      bookedTodayByProduct,
+      todayKey: todayKey(),
+      message: req.query.message || null,
+      error: req.query.error || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /staff/occupy/:id — power occupies, normal files a request
+exports.occupy = async (req, res, next) => {
+  try {
+    const user = req.staff;
+    const reason = (req.body.reason || '').trim().slice(0, 120);
+    if (reason.length < 2) return back(res, 'Please give a short reason first');
+
+    const product = await Product.findById(req.params.id);
+    if (!product) return back(res, 'That instrument no longer exists');
+
+    if (user.accountType === 'power') {
+      try {
+        await occupyProduct({ product, user, reason, source: 'web' });
+        return back(res, `${product.name} is now with you`);
+      } catch (err) {
+        return back(res, err.message);
+      }
+    }
+
+    // Normal account: file a request for the admin
+    if (product.assignedTo) return back(res, 'Someone just took it');
+    if (product.condition === 'retired' || product.status === 'maintenance' || product.condition === 'needs-repair') {
+      return back(res, 'This instrument is not available right now');
+    }
+    const duplicate = await AssignmentRequest.findOne({
+      user: user._id,
+      product: product._id,
+      status: 'pending',
+    });
+    if (duplicate) return back(res, 'You have already asked for this one — waiting for the admin');
+
+    const request = await AssignmentRequest.create({
+      product: product._id,
+      productName: product.name,
+      assetTag: product.assetTag,
+      imageUrl: product.imageUrl || null,
+      user: user._id,
+      userName: user.name,
+      reason: reason || null,
+    });
+
+    notifyAdmins(
+      `🙋 <b>${escapeHtml(request.userName)}</b> is asking for ` +
+        `<b>${escapeHtml(request.productName)}</b> <code>${escapeHtml(request.assetTag || '')}</code> (from the website).\n` +
+        (request.reason ? `📝 ${escapeHtml(request.reason)}\n` : '') +
+        `Tap to decide, or use the panel → Requests.`,
+      {
+        inline_keyboard: [
+          [
+            { text: '✅ Approve', callback_data: `aprq:${request._id}` },
+            { text: '❌ Decline', callback_data: `rjrq:${request._id}` },
+          ],
+        ],
+      }
+    );
+
+    back(res, 'Request sent to the admin — you will be notified on Telegram when it is decided');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /staff/return/:id
+exports.returnItem = async (req, res, next) => {
+  try {
+    const user = req.staff;
+    const product = await Product.findById(req.params.id);
+    if (!product) return back(res, 'That instrument no longer exists');
+    if (!product.assignedTo || String(product.assignedTo) !== String(user._id)) {
+      return back(res, 'That one is not with you');
+    }
+    await releaseProduct({ product, source: 'web' });
+    back(res, `${product.name} is back on the shelf — thank you`);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /staff/book/:id
+exports.book = async (req, res, next) => {
+  try {
+    const user = req.staff;
+    const dateKey = (req.body.date || '').trim();
+    const reason = (req.body.reason || '').trim().slice(0, 120);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return back(res, 'Pick a date for the booking');
+    if (reason.length < 2) return back(res, 'Please give a short reason for the booking');
+
+    const product = await Product.findById(req.params.id).lean();
+    if (!product) return back(res, 'That instrument no longer exists');
+
+    try {
+      const booking = await createBooking({ product, user, dateKey, reason, source: 'web' });
+      return back(
+        res,
+        booking.status === 'confirmed'
+          ? `Booked — ${product.name} is reserved for you on ${formatDay(dateKey)}`
+          : `Booking sent to the admin for ${formatDay(dateKey)} — you will be notified on Telegram`
+      );
+    } catch (err) {
+      return back(res, err.message);
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /staff/requests/:id/cancel
+exports.cancelRequest = async (req, res, next) => {
+  try {
+    const request = await AssignmentRequest.findOne({
+      _id: req.params.id,
+      user: req.staff._id,
+      status: 'pending',
+    });
+    if (!request) return back(res, 'That request has already been dealt with');
+    request.status = 'cancelled';
+    request.decidedAt = new Date();
+    await request.save();
+    back(res, 'Request cancelled');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /staff/bookings/:id/cancel
+exports.cancelBooking = async (req, res, next) => {
+  try {
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      user: req.staff._id,
+      status: { $in: ['pending', 'confirmed'] },
+    });
+    if (!booking) return back(res, 'That booking has already been dealt with');
+    booking.status = 'cancelled';
+    booking.decidedAt = new Date();
+    await booking.save();
+    back(res, 'Booking cancelled');
+  } catch (err) {
+    next(err);
+  }
+};

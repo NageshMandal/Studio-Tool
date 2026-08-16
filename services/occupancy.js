@@ -1,4 +1,6 @@
 const UsageLog = require('../models/UsageLog');
+const Booking = require('../models/Booking');
+const { todayKey } = require('../utils/format');
 
 /**
  * The single place where an instrument changes hands. Both the Telegram bot
@@ -16,6 +18,22 @@ async function occupyProduct({ product, user, reason, source = 'telegram' }) {
     const err = new Error('This instrument is retired and cannot be taken out');
     err.code = 'RETIRED';
     throw err;
+  }
+
+  // A confirmed booking for today reserves the item for the person who booked
+  // it. The admin panel can still hand it to anyone (source 'admin').
+  if (source !== 'admin') {
+    const booking = await Booking.findOne({
+      product: product._id,
+      bookedFor: todayKey(),
+      status: 'confirmed',
+    }).lean();
+    if (booking && String(booking.user) !== String(user._id)) {
+      const err = new Error(`Booked for ${booking.userName} today`);
+      err.code = 'BOOKED_TODAY';
+      err.bookedBy = booking.userName;
+      throw err;
+    }
   }
 
   const cleanReason = (reason || '').trim().slice(0, 120) || null;

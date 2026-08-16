@@ -10,8 +10,9 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const apiRoutes = require('./routes/apiRoutes');
+const staffRoutes = require('./routes/staffRoutes');
 const { startBot } = require('./bot');
-const { formatWhen, formatTime, formatDuration, formatSince } = require('./utils/format');
+const { formatWhen, formatTime, formatDuration, formatSince, formatDay, todayKey } = require('./utils/format');
 
 const requiredEnv = ['MONGO_URI', 'JWT_SECRET', 'ADMIN_EMAIL', 'ADMIN_PASSWORD'];
 const missing = requiredEnv.filter((key) => !process.env[key]);
@@ -46,11 +47,69 @@ app.use((req, res, next) => {
   res.locals.formatTime = formatTime;
   res.locals.formatDuration = formatDuration;
   res.locals.formatSince = formatSince;
+  res.locals.formatDay = formatDay;
   next();
 });
 
-app.get('/', (req, res) => res.redirect('/admin/dashboard'));
+// Public shelf view: anyone can see what is available and what is out,
+// without signing in. Staff and admin sign-in links live in its header.
+const Product = require('./models/Product');
+const User = require('./models/User');
+app.get('/', async (req, res, next) => {
+  try {
+    const products = await Product.find().sort({ category: 1, name: 1 }).lean();
+
+    const holderIds = [...new Set(products.filter((p) => p.assignedTo).map((p) => String(p.assignedTo)))];
+    const holders = holderIds.length ? await User.find({ _id: { $in: holderIds } }, 'name').lean() : [];
+    const holderMap = holders.reduce((acc, h) => ({ ...acc, [String(h._id)]: h.name }), {});
+
+    const isBlocked = (p) => p.condition === 'retired' || p.status === 'maintenance' || p.condition === 'needs-repair';
+    const counts = {
+      total: products.length,
+      available: products.filter((p) => !p.assignedTo && !isBlocked(p)).length,
+      occupied: products.filter((p) => p.assignedTo).length,
+      maintenance: products.filter((p) => !p.assignedTo && isBlocked(p) && p.condition !== 'retired').length,
+    };
+
+    const groups = [];
+    const map = new Map();
+    products.forEach((p) => {
+      if (!map.has(p.category)) {
+        const g = { category: p.category, items: [], available: 0 };
+        map.set(p.category, g);
+        groups.push(g);
+      }
+      const g = map.get(p.category);
+      g.items.push(p);
+      if (!p.assignedTo && !isBlocked(p)) g.available += 1;
+    });
+
+    res.render('public-catalog', { layout: false, groups, holderMap, counts });
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.use('/', authRoutes);
+app.use('/staff', staffRoutes);
+
+// Pending-request count for the sidebar badge, on admin pages only.
+// A failed count must never block a page, so it falls back to 0.
+const AssignmentRequest = require('./models/AssignmentRequest');
+const Booking = require('./models/Booking');
+app.use('/admin', async (req, res, next) => {
+  try {
+    const [requests, bookings] = await Promise.all([
+      AssignmentRequest.countDocuments({ status: 'pending' }),
+      Booking.countDocuments({ status: 'pending' }),
+    ]);
+    res.locals.pendingRequestCount = requests + bookings;
+  } catch (err) {
+    res.locals.pendingRequestCount = 0;
+  }
+  next();
+});
+
 app.use('/admin', adminRoutes);
 app.use('/api', apiRoutes);
 

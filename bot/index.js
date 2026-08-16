@@ -1,5 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { handleMessage, handleCallback } = require('./handlers');
+const { registerBot } = require('./notify');
 
 /**
  * Starts long polling. Returns null (and says why) when no token is set,
@@ -14,6 +15,7 @@ function startBot() {
   }
 
   const bot = new TelegramBot(token, { polling: true });
+  registerBot(bot); // lets the admin panel push approval/rejection messages
 
   bot.on('message', (msg) => {
     handleMessage(bot, msg).catch((err) => {

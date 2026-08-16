@@ -1,6 +1,7 @@
 const Product = require('../models/Product');
 const User = require('../models/User');
 const UsageLog = require('../models/UsageLog');
+const AssignmentRequest = require('../models/AssignmentRequest');
 const { syncAssignment, releaseProduct, occupyProduct } = require('../services/occupancy');
 const { dayRange } = require('../utils/format');
 
@@ -232,6 +233,11 @@ exports.remove = async (req, res, next) => {
     if (product && product.assignedTo) {
       await releaseProduct({ product, source: 'admin', note: 'Instrument removed from the register' });
     }
+    // Any open requests for it can no longer be honoured
+    await AssignmentRequest.updateMany(
+      { product: req.params.id, status: 'pending' },
+      { status: 'cancelled', decidedAt: new Date(), decisionNote: 'Instrument removed from the register' }
+    );
     await Product.findByIdAndDelete(req.params.id);
     res.redirect('/admin/products?message=Instrument removed');
   } catch (err) {

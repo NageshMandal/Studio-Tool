@@ -25,8 +25,8 @@ const usageLogSchema = new mongoose.Schema(
     // Why the item was taken, captured at the moment it went out
     reason: { type: String, trim: true, maxlength: 120, default: null },
 
-    source: { type: String, enum: ['telegram', 'admin'], default: 'telegram' },
-    returnSource: { type: String, enum: ['telegram', 'admin'], default: null },
+    source: { type: String, enum: ['telegram', 'admin', 'web'], default: 'telegram' },
+    returnSource: { type: String, enum: ['telegram', 'admin', 'web'], default: null },
     note: { type: String, trim: true },
   },
   { timestamps: true }

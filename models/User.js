@@ -45,6 +45,18 @@ const userSchema = new mongoose.Schema(
       enum: ['active', 'inactive'],
       default: 'active',
     },
+    /**
+     * What the person may do from the Telegram bot:
+     *  - 'power'  — can occupy an available instrument immediately, no approval.
+     *  - 'normal' — can only *request* an instrument; an admin has to approve
+     *               it from the panel before it is handed over. The bot then
+     *               notifies the person of the decision.
+     */
+    accountType: {
+      type: String,
+      enum: ['power', 'normal'],
+      default: 'normal',
+    },
     // Set once the person signs in through the Telegram bot
     telegramChatId: {
       type: String,

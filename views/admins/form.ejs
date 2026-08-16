@@ -1,0 +1,36 @@
+<section class="panel panel-form">
+  <div class="panel-head">
+    <h2>New admin</h2>
+    <a class="btn btn-ghost" href="/admin/admins">Back to list</a>
+  </div>
+
+  <% if (error) { %>
+    <div class="alert alert-error"><%= error %></div>
+  <% } %>
+
+  <form method="POST" action="/admin/admins">
+    <div class="grid-2">
+      <label class="field">
+        <span>Full name</span>
+        <input type="text" name="name" value="<%= admin.name || '' %>" placeholder="Priya Sharma" required />
+      </label>
+
+      <label class="field">
+        <span>Email</span>
+        <input type="email" name="email" value="<%= admin.email || '' %>" placeholder="priya@office.com" required />
+      </label>
+
+      <label class="field">
+        <span>Password</span>
+        <input type="password" name="password" minlength="6" placeholder="At least 6 characters" required />
+      </label>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Add admin</button>
+      <a class="btn btn-ghost" href="/admin/admins">Cancel</a>
+    </div>
+  </form>
+
+  <p class="hint">The new admin can immediately sign in to this panel and to the Telegram bot with these credentials. In the bot they will get every request and booking notification with approve/decline buttons.</p>
+</section>

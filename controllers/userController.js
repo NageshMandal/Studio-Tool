@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Product = require('../models/Product');
+const AssignmentRequest = require('../models/AssignmentRequest');
 const { releaseProduct } = require('../services/occupancy');
 
 const DEPARTMENTS = ['Studio', 'Editing', 'Design', 'Production', 'Admin', 'Other'];
@@ -61,8 +62,8 @@ exports.newForm = (req, res) => {
 // POST /admin/users
 exports.create = async (req, res) => {
   try {
-    const { name, email, password, employeeId, phone, department, designation, status } = req.body;
-    await User.create({ name, email, password, employeeId, phone, department, designation, status });
+    const { name, email, password, employeeId, phone, department, designation, status, accountType } = req.body;
+    await User.create({ name, email, password, employeeId, phone, department, designation, status, accountType });
     res.redirect('/admin/users?message=Person added');
   } catch (err) {
     const message =
@@ -105,8 +106,8 @@ exports.update = async (req, res) => {
     const user = await User.findById(req.params.id).select('+password');
     if (!user) return res.redirect('/admin/users?message=Person not found');
 
-    const { name, email, password, employeeId, phone, department, designation, status } = req.body;
-    Object.assign(user, { name, email, employeeId, phone, department, designation, status });
+    const { name, email, password, employeeId, phone, department, designation, status, accountType } = req.body;
+    Object.assign(user, { name, email, employeeId, phone, department, designation, status, accountType });
 
     // Only touch the password when a new one was typed in
     if (password && password.trim()) user.password = password.trim();
@@ -183,6 +184,11 @@ exports.remove = async (req, res, next) => {
     for (const product of held) {
       await releaseProduct({ product, source: 'admin', note: 'Holder removed from the register' });
     }
+    // Their open requests no longer mean anything
+    await AssignmentRequest.updateMany(
+      { user: req.params.id, status: 'pending' },
+      { status: 'cancelled', decidedAt: new Date(), decisionNote: 'Person removed from the register' }
+    );
     await User.findByIdAndDelete(req.params.id);
     res.redirect('/admin/users?message=Person removed');
   } catch (err) {

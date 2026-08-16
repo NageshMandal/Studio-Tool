@@ -1,0 +1,157 @@
+<% if (message) { %>
+  <div class="alert alert-info"><%= message %></div>
+<% } %>
+<% if (error) { %>
+  <div class="alert alert-error"><%= error %></div>
+<% } %>
+
+<% if (myItems.length > 0) { %>
+  <section class="panel">
+    <div class="panel-head"><h2>You are holding <%= myItems.length %> item<%= myItems.length === 1 ? '' : 's' %></h2></div>
+    <table class="table">
+      <tbody>
+        <% myItems.forEach(function (p) { %>
+          <tr>
+            <td class="thumb-cell"><%- include('../partials/thumb', { thumbUrl: p.imageUrl, thumbName: p.name }) %></td>
+            <td>
+              <span class="row-title"><%= p.name %></span>
+              <span class="row-sub"><span class="asset-tag"><%= p.assetTag %></span> · taken <%= formatWhen(p.occupiedAt) %> (<%= formatSince(p.occupiedAt) %> ago)</span>
+              <% if (p.occupyReason) { %><span class="row-sub">📝 <%= p.occupyReason %></span><% } %>
+            </td>
+            <td class="right">
+              <form method="POST" action="/staff/return/<%= p._id %>">
+                <button class="btn btn-primary btn-small" type="submit">Submit item</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </section>
+<% } %>
+
+<% if (myRequests.length > 0 || myBookings.length > 0) { %>
+  <section class="panel">
+    <div class="panel-head"><h2>Waiting and booked</h2></div>
+    <table class="table">
+      <tbody>
+        <% myRequests.forEach(function (r) { %>
+          <tr>
+            <td>
+              <span class="row-title">⏳ <%= r.productName %></span>
+              <span class="row-sub"><span class="asset-tag"><%= r.assetTag || '—' %></span> · asked <%= formatWhen(r.createdAt) %> · waiting for admin approval</span>
+              <% if (r.reason) { %><span class="row-sub">📝 <%= r.reason %></span><% } %>
+            </td>
+            <td class="right">
+              <form method="POST" action="/staff/requests/<%= r._id %>/cancel">
+                <button class="btn btn-ghost btn-small" type="submit">Cancel request</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+        <% myBookings.forEach(function (b) { %>
+          <tr>
+            <td>
+              <span class="row-title">📅 <%= b.productName %> — <%= formatDay(b.bookedFor) %></span>
+              <span class="row-sub">
+                <span class="asset-tag"><%= b.assetTag || '—' %></span> ·
+                <% if (b.status === 'confirmed') { %><span class="pill pill-available">confirmed</span><% } else { %><span class="pill pill-maintenance">waiting for admin</span><% } %>
+              </span>
+              <% if (b.reason) { %><span class="row-sub">📝 <%= b.reason %></span><% } %>
+            </td>
+            <td class="right">
+              <form method="POST" action="/staff/bookings/<%= b._id %>/cancel">
+                <button class="btn btn-ghost btn-small" type="submit">Cancel booking</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </section>
+<% } %>
+
+<% groups.forEach(function (g) { %>
+  <section class="panel">
+    <div class="panel-head"><h2><%= g.category %></h2></div>
+    <table class="table">
+      <tbody>
+        <% g.items.forEach(function (p) {
+             var retired = p.condition === 'retired';
+             var blocked = retired || p.status === 'maintenance' || p.condition === 'needs-repair';
+             var mine = p.assignedTo && String(p.assignedTo) === String(user._id);
+             var myPending = pendingByProduct[String(p._id)];
+             var bookedToday = bookedTodayByProduct[String(p._id)];
+             var takeable = !p.assignedTo && !blocked;
+        %>
+          <tr>
+            <td class="thumb-cell"><%- include('../partials/thumb', { thumbUrl: p.imageUrl, thumbName: p.name }) %></td>
+            <td>
+              <span class="row-title"><%= p.name %></span>
+              <span class="row-sub">
+                <span class="asset-tag"><%= p.assetTag %></span>
+                <% if (p.brand || p.model) { %> · <%= [p.brand, p.model].filter(Boolean).join(' ') %><% } %>
+                <% if (p.location) { %> · <%= p.location %><% } %>
+              </span>
+              <span class="row-sub">
+                <% if (retired) { %>
+                  <span class="pill pill-retired">retired</span>
+                <% } else if (blocked) { %>
+                  <span class="pill pill-maintenance">in maintenance</span>
+                <% } else if (mine) { %>
+                  <span class="pill pill-assigned">with you</span> since <%= formatWhen(p.occupiedAt) %>
+                <% } else if (p.assignedTo) { %>
+                  <span class="pill pill-assigned">occupied</span>
+                  with <%= holderMap[String(p.assignedTo)] || 'someone' %> · since <%= formatWhen(p.occupiedAt) %> (<%= formatSince(p.occupiedAt) %>)
+                  <% if (p.occupyReason) { %> · 📝 <%= p.occupyReason %><% } %>
+                <% } else { %>
+                  <span class="pill pill-available">available</span>
+                <% } %>
+                <% if (bookedToday) { %>
+                  · <span class="pill pill-power">booked today: <%= bookedToday.userName %></span>
+                <% } %>
+              </span>
+            </td>
+            <td class="right staff-actions">
+              <% if (mine) { %>
+                <form method="POST" action="/staff/return/<%= p._id %>">
+                  <button class="btn btn-primary btn-small" type="submit">Submit item</button>
+                </form>
+              <% } else if (myPending) { %>
+                <form method="POST" action="/staff/requests/<%= myPending._id %>/cancel">
+                  <button class="btn btn-ghost btn-small" type="submit">Cancel request</button>
+                </form>
+              <% } else if (takeable) { %>
+                <details class="staff-drop">
+                  <summary class="btn btn-primary btn-small"><%= user.accountType === 'power' ? 'Occupy now' : 'Request item' %></summary>
+                  <form class="staff-popform" method="POST" action="/staff/occupy/<%= p._id %>">
+                    <input type="text" name="reason" maxlength="120" placeholder="What is it for?" required minlength="2" />
+                    <button class="btn btn-primary btn-small" type="submit">
+                      <%= user.accountType === 'power' ? 'Take it' : 'Send to admin' %>
+                    </button>
+                  </form>
+                </details>
+              <% } %>
+              <% if (!retired) { %>
+                <details class="staff-drop">
+                  <summary class="btn btn-ghost btn-small">Book a date</summary>
+                  <form class="staff-popform" method="POST" action="/staff/book/<%= p._id %>">
+                    <input type="date" name="date" min="<%= todayKey %>" required />
+                    <input type="text" name="reason" maxlength="120" placeholder="What is it for?" required minlength="2" />
+                    <button class="btn btn-primary btn-small" type="submit">
+                      <%= user.accountType === 'power' ? 'Book it' : 'Ask admin' %>
+                    </button>
+                  </form>
+                </details>
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </section>
+<% }); %>
+
+<% if (groups.length === 0) { %>
+  <section class="panel"><div class="empty"><p>Nothing is on the register yet.</p></div></section>
+<% } %>

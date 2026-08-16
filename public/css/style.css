@@ -469,3 +469,55 @@ body.centered {
 .preview-box img { width: 100%; height: 100%; object-fit: cover; }
 .preview-empty { font-size: 13px; color: var(--muted); padding: 8px; text-align: center; }
 .field-note { font-size: 11px; color: var(--muted); font-weight: 400; }
+
+/* --- Assignment requests --- */
+.nav-badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--danger, #e5484d);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pill-power { background: var(--accent-soft); color: var(--accent); }
+.pill-normal { background: var(--line, #e6e6e6); color: var(--muted, #667085); }
+
+/* --- Staff portal & public shelf --- */
+.staff-body { display: block; min-height: 100vh; background: var(--bg, #f4f6fa); }
+.staff-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--panel, #fff);
+  border-bottom: 1px solid var(--line);
+}
+.staff-topbar .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+.staff-topbar-right { display: flex; align-items: center; gap: 12px; }
+.staff-me { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.staff-main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; display: grid; gap: 20px; }
+.staff-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: flex-start; flex-wrap: wrap; }
+.staff-drop { position: relative; }
+.staff-drop summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; }
+.staff-drop summary::-webkit-details-marker { display: none; }
+.staff-popform {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  background: var(--panel, #fff);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(20, 24, 40, 0.12);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+}
+.staff-popform input { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }

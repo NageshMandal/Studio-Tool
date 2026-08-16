@@ -16,8 +16,17 @@
     <a class="nav-link <%= active === 'users' ? 'is-active' : '' %>" href="/admin/users">
       <span class="nav-dot"></span> People
     </a>
+    <a class="nav-link <%= active === 'requests' ? 'is-active' : '' %>" href="/admin/requests">
+      <span class="nav-dot"></span> Requests
+      <% if (typeof pendingRequestCount !== 'undefined' && pendingRequestCount > 0) { %>
+        <span class="nav-badge"><%= pendingRequestCount %></span>
+      <% } %>
+    </a>
     <a class="nav-link <%= active === 'logs' ? 'is-active' : '' %>" href="/admin/logs">
       <span class="nav-dot"></span> Usage log
+    </a>
+    <a class="nav-link <%= active === 'admins' ? 'is-active' : '' %>" href="/admin/admins">
+      <span class="nav-dot"></span> Admins
     </a>
   </nav>
 

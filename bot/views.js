@@ -1,4 +1,4 @@
-const { formatWhen, formatSince, escapeHtml } = require('../utils/format');
+const { formatWhen, formatSince, escapeHtml, todayKey, formatDay, shiftDay } = require('../utils/format');
 
 const AVAILABLE = '🟢';
 const OCCUPIED = '🔴';
@@ -47,17 +47,66 @@ const QUICK_REASONS = [
   'Repair / check-up',
 ];
 
-function reasonPrompt(item) {
+function reasonPrompt(item, isRequest = false) {
   const rows = QUICK_REASONS.map((reason, i) => [
     { text: reason, callback_data: `rsn:${item._id}:${i}` },
   ]);
   rows.push([{ text: '✍️ Type my own reason', callback_data: `rsnown:${item._id}` }]);
   rows.push([{ text: '✖️ Cancel', callback_data: `item:${item._id}` }]);
 
+  const tail = isRequest
+    ? `Your request will be sent to the admin — you will get a message here as soon as it is approved.`
+    : `Tap a reason below, or just type one in a few words.`;
+
   return {
     text:
       `What do you need <b>${escapeHtml(item.name)}</b> for?\n\n` +
-      `Tap a reason below, or just type one in a few words.`,
+      tail,
+    keyboard: { inline_keyboard: rows },
+  };
+}
+
+/**
+ * Day picker for a booking: today plus the next seven days as buttons, with
+ * a type-your-own fallback for anything further out.
+ */
+function bookDayPrompt(item, isPower) {
+  const rows = [];
+  for (let i = 0; i <= 7; i += 2) {
+    const row = [];
+    for (let j = i; j < i + 2 && j <= 7; j += 1) {
+      const key = shiftDay(todayKey(), j);
+      const label = j === 0 ? 'Today' : j === 1 ? 'Tomorrow' : formatDay(key);
+      row.push({ text: label, callback_data: `bkd:${item._id}:${key}` });
+    }
+    rows.push(row);
+  }
+  rows.push([{ text: '✍️ Type another date', callback_data: `bkdown:${item._id}` }]);
+  rows.push([{ text: '✖️ Cancel', callback_data: `item:${item._id}` }]);
+
+  const tail = isPower
+    ? 'Your booking is confirmed instantly — the item is reserved for you that whole day.'
+    : 'Your booking goes to the admin for approval. You will get a message here with the decision.';
+
+  return {
+    text:
+      `📅 Book <b>${escapeHtml(item.name)}</b> for which day?\n\n${tail}`,
+    keyboard: { inline_keyboard: rows },
+  };
+}
+
+// Same quick reasons as taking an item out, but for a chosen day
+function bookReasonPrompt(item, dateKey) {
+  const rows = QUICK_REASONS.map((reason, i) => [
+    { text: reason, callback_data: `bkr:${item._id}:${dateKey}:${i}` },
+  ]);
+  rows.push([{ text: '✍️ Type my own reason', callback_data: `bkrown:${item._id}:${dateKey}` }]);
+  rows.push([{ text: '✖️ Cancel', callback_data: `item:${item._id}` }]);
+
+  return {
+    text:
+      `Booking <b>${escapeHtml(item.name)}</b> for <b>${escapeHtml(formatDay(dateKey))}</b>.\n\n` +
+      `What is it for?`,
     keyboard: { inline_keyboard: rows },
   };
 }
@@ -152,7 +201,14 @@ function itemList(category, items, holders) {
   };
 }
 
-function itemDetail(item, holderName, viewerId) {
+/**
+ * `viewer` is the signed-in user document (or just its _id for callers that
+ * never show a take-out button). `pendingRequest` is the viewer's own open
+ * request for this item, if any.
+ */
+function itemDetail(item, holderName, viewer, pendingRequest = null) {
+  const viewerId = viewer && viewer._id ? viewer._id : viewer;
+  const isPower = !!(viewer && viewer.accountType === 'power');
   const heldByViewer = item.assignedTo && String(item.assignedTo) === String(viewerId);
 
   const details = [
@@ -168,12 +224,28 @@ function itemDetail(item, holderName, viewerId) {
   details.push('');
   details.push(availabilityLine(item, holderName));
 
+  if (pendingRequest) {
+    details.push(`\n⏳ You have asked for this item — waiting for the admin to approve.`);
+    if (pendingRequest.reason) details.push(`📝 ${escapeHtml(pendingRequest.reason)}`);
+  }
+
   const rows = [];
 
   if (heldByViewer) {
     rows.push([{ text: '✅ Submit item (return it)', callback_data: `ret:${item._id}` }]);
+  } else if (pendingRequest) {
+    rows.push([{ text: '✖️ Cancel my request', callback_data: `cxl:${pendingRequest._id}` }]);
   } else if (isTakeable(item)) {
-    rows.push([{ text: '📌 Occupy now', callback_data: `occ:${item._id}` }]);
+    rows.push([
+      isPower
+        ? { text: '📌 Occupy now', callback_data: `occ:${item._id}` }
+        : { text: '🙋 Request this item', callback_data: `occ:${item._id}` },
+    ]);
+  }
+
+  // Booking is about a future day, so an occupied item can still be booked
+  if (blockedReason(item) !== 'retired') {
+    rows.push([{ text: '📅 Book for a date', callback_data: `bk:${item._id}` }]);
   }
 
   rows.push([
@@ -188,8 +260,8 @@ function itemDetail(item, holderName, viewerId) {
   };
 }
 
-function myItems(items) {
-  if (items.length === 0) {
+function myItems(items, pendingRequests = [], bookings = []) {
+  if (items.length === 0 && pendingRequests.length === 0 && bookings.length === 0) {
     return {
       text: 'You are not holding anything right now. 🎒',
       keyboard: {
@@ -201,18 +273,55 @@ function myItems(items) {
     };
   }
 
-  const lines = items.map((item) => {
-    const head = `📌 <b>${escapeHtml(item.name)}</b>\n   <code>${escapeHtml(item.assetTag)}</code> · taken ${formatWhen(item.occupiedAt)} (${formatSince(item.occupiedAt)} ago)`;
-    return item.occupyReason ? `${head}\n   📝 ${escapeHtml(item.occupyReason)}` : head;
-  });
+  const sections = [];
+  const rows = [];
 
-  const rows = items.map((item) => [
-    { text: `✅ Submit ${item.name}`.slice(0, 60), callback_data: `ret:${item._id}` },
-  ]);
+  if (items.length > 0) {
+    const lines = items.map((item) => {
+      const head = `📌 <b>${escapeHtml(item.name)}</b>\n   <code>${escapeHtml(item.assetTag)}</code> · taken ${formatWhen(item.occupiedAt)} (${formatSince(item.occupiedAt)} ago)`;
+      return item.occupyReason ? `${head}\n   📝 ${escapeHtml(item.occupyReason)}` : head;
+    });
+    sections.push(
+      `<b>You are holding ${items.length} item${items.length === 1 ? '' : 's'}</b>\n\n${lines.join('\n\n')}`
+    );
+    items.forEach((item) =>
+      rows.push([{ text: `✅ Submit ${item.name}`.slice(0, 60), callback_data: `ret:${item._id}` }])
+    );
+  }
+
+  if (pendingRequests.length > 0) {
+    const lines = pendingRequests.map((r) => {
+      const head = `⏳ <b>${escapeHtml(r.productName)}</b>\n   <code>${escapeHtml(r.assetTag || '')}</code> · asked ${formatWhen(r.createdAt)}`;
+      return r.reason ? `${head}\n   📝 ${escapeHtml(r.reason)}` : head;
+    });
+    sections.push(`<b>Waiting for admin approval</b>\n\n${lines.join('\n\n')}`);
+    pendingRequests.forEach((r) =>
+      rows.push([{ text: `✖️ Cancel request: ${r.productName}`.slice(0, 60), callback_data: `cxl:${r._id}` }])
+    );
+  }
+
+  if (bookings.length > 0) {
+    const lines = bookings.map((b) => {
+      const icon = b.status === 'confirmed' ? '📅' : '⏳';
+      const state = b.status === 'confirmed' ? 'confirmed' : 'waiting for admin';
+      const head = `${icon} <b>${escapeHtml(b.productName)}</b> — ${escapeHtml(formatDay(b.bookedFor))} (${state})\n   <code>${escapeHtml(b.assetTag || '')}</code>`;
+      return b.reason ? `${head}\n   📝 ${escapeHtml(b.reason)}` : head;
+    });
+    sections.push(`<b>Your bookings</b>\n\n${lines.join('\n\n')}`);
+    bookings.forEach((b) =>
+      rows.push([
+        {
+          text: `✖️ Cancel booking: ${b.productName} · ${formatDay(b.bookedFor)}`.slice(0, 60),
+          callback_data: `bkcxl:${b._id}`,
+        },
+      ])
+    );
+  }
+
   rows.push([{ text: '🏠 Menu', callback_data: 'menu' }]);
 
   return {
-    text: `<b>You are holding ${items.length} item${items.length === 1 ? '' : 's'}</b>\n\n${lines.join('\n\n')}`,
+    text: sections.join('\n\n———\n\n'),
     keyboard: { inline_keyboard: rows },
   };
 }
@@ -236,10 +345,84 @@ function occupiedList(items, holders) {
   };
 }
 
+
+/* ------------------------------------------------------------------ *
+ * admin views — shown to signed-in admin accounts
+ * ------------------------------------------------------------------ */
+
+function adminMenu(admin, counts = { requests: 0, bookings: 0 }) {
+  return {
+    text:
+      `Hi ${escapeHtml(admin.name)} \u{1F6E1} — you are signed in as an <b>admin</b>.\n\n` +
+      `\u{1F4E5} Pending requests: <b>${counts.requests}</b>\n` +
+      `\u{1F4C5} Pending bookings: <b>${counts.bookings}</b>\n\n` +
+      `New requests and bookings will land in this chat with approve and decline buttons.`,
+    keyboard: {
+      inline_keyboard: [
+        [{ text: `\u{1F4E5} Pending requests (${counts.requests})`, callback_data: 'adm:reqs' }],
+        [{ text: `\u{1F4C5} Pending bookings (${counts.bookings})`, callback_data: 'adm:bks' }],
+        [{ text: '\u{1F534} Occupied right now', callback_data: 'adm:busy' }],
+        [{ text: '\u{1F6AA} Sign out', callback_data: 'adm:logout' }],
+      ],
+    },
+  };
+}
+
+// One message per pending request, so each carries its own decision buttons
+function adminRequestCard(r) {
+  return {
+    text:
+      `\u{1F64B} <b>${escapeHtml(r.userName)}</b> is asking for\n` +
+      `<b>${escapeHtml(r.productName)}</b> <code>${escapeHtml(r.assetTag || '')}</code>\n` +
+      (r.reason ? `\u{1F4DD} ${escapeHtml(r.reason)}\n` : '') +
+      `Asked ${formatWhen(r.createdAt)} (${formatSince(r.createdAt)} ago)`,
+    keyboard: {
+      inline_keyboard: [
+        [
+          { text: '\u2705 Approve', callback_data: `aprq:${r._id}` },
+          { text: '\u274C Decline', callback_data: `rjrq:${r._id}` },
+        ],
+      ],
+    },
+  };
+}
+
+function adminBookingCard(b) {
+  return {
+    text:
+      `\u{1F4C5} <b>${escapeHtml(b.userName)}</b> wants to book\n` +
+      `<b>${escapeHtml(b.productName)}</b> <code>${escapeHtml(b.assetTag || '')}</code>\n` +
+      `For <b>${escapeHtml(formatDay(b.bookedFor))}</b>\n` +
+      (b.reason ? `\u{1F4DD} ${escapeHtml(b.reason)}\n` : '') +
+      `Asked ${formatWhen(b.createdAt)}`,
+    keyboard: {
+      inline_keyboard: [
+        [
+          { text: '\u2705 Approve', callback_data: `apbk:${b._id}` },
+          { text: '\u274C Decline', callback_data: `rjbk:${b._id}` },
+        ],
+      ],
+    },
+  };
+}
+
+function adminEmptyList(what) {
+  return {
+    text: `Nothing pending. \u2728 No ${what} are waiting for a decision.`,
+    keyboard: { inline_keyboard: [[{ text: '\u2B05\uFE0F Back', callback_data: 'adm:menu' }]] },
+  };
+}
+
 module.exports = {
+  adminMenu,
+  adminRequestCard,
+  adminBookingCard,
+  adminEmptyList,
   categoryPhotos,
   QUICK_REASONS,
   reasonPrompt,
+  bookDayPrompt,
+  bookReasonPrompt,
   blockedReason,
   isTakeable,
   statusIcon,

@@ -76,4 +76,65 @@ function escapeHtml(text) {
     .replace(/>/g, '&gt;');
 }
 
-module.exports = { TZ, formatWhen, formatTime, formatDuration, formatSince, dayRange, shiftDay, escapeHtml };
+/* ---- Booking day keys ----------------------------------------------- *
+ * A booking is for a whole day. Days are stored as 'YYYY-MM-DD' strings
+ * in the configured timezone so comparisons are simple string equality.
+ */
+
+// The day a given instant falls on, in the configured timezone
+function dateKeyOf(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(date));
+}
+
+const todayKey = () => dateKeyOf(new Date());
+
+/**
+ * Parse a typed date: '2026-08-20', '20-08-2026' or '20/08/2026'.
+ * Returns a 'YYYY-MM-DD' key, or null when it is not a real date.
+ */
+function parseDateKey(text) {
+  const t = String(text || '').trim();
+  let y, m, d;
+  let match = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) [, y, m, d] = match;
+  else {
+    match = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+    if (!match) return null;
+    [, d, m, y] = match;
+  }
+  const key = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const probe = new Date(`${key}T12:00:00Z`);
+  if (Number.isNaN(probe.getTime()) || probe.toISOString().slice(0, 10) !== key) return null;
+  return key;
+}
+
+// '2026-08-20' -> 'Thu, 20 Aug'
+function formatDay(key) {
+  if (!key) return '—';
+  return new Date(`${key}T12:00:00Z`).toLocaleDateString('en-IN', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+  });
+}
+
+module.exports = {
+  TZ,
+  formatWhen,
+  formatTime,
+  formatDuration,
+  formatSince,
+  dayRange,
+  shiftDay,
+  escapeHtml,
+  dateKeyOf,
+  todayKey,
+  parseDateKey,
+  formatDay,
+};

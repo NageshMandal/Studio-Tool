@@ -1,0 +1,212 @@
+<% if (message) { %>
+  <div class="alert alert-info"><%= message %></div>
+<% } %>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Waiting for approval (<%= pending.length %>)</h2>
+  </div>
+
+  <% if (pending.length === 0) { %>
+    <div class="empty">
+      <p>No pending requests. When a normal user asks for an instrument from the Telegram bot, it will show up here.</p>
+    </div>
+  <% } else { %>
+    <table class="table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Instrument</th>
+          <th>Requested by</th>
+          <th>Reason</th>
+          <th>Asked</th>
+          <th class="right">Decision</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% pending.forEach(function (r) { %>
+          <tr>
+            <td class="thumb-cell">
+              <%- include('../partials/thumb', { thumbUrl: r.imageUrl, thumbName: r.productName }) %>
+            </td>
+            <td>
+              <span class="row-title"><%= r.productName %></span>
+              <span class="row-sub"><span class="asset-tag"><%= r.assetTag || '—' %></span></span>
+              <% if (r.productGone) { %>
+                <span class="pill pill-retired">item deleted</span>
+              <% } else if (r.productBusy) { %>
+                <span class="pill pill-assigned">now with someone else</span>
+              <% } else if (r.productBlocked) { %>
+                <span class="pill pill-maintenance">not available</span>
+              <% } %>
+            </td>
+            <td><%= r.userName %></td>
+            <td><%= r.reason || '—' %></td>
+            <td><%= formatWhen(r.createdAt) %><span class="row-sub"><%= formatSince(r.createdAt) %> ago</span></td>
+            <td class="right">
+              <form method="POST" action="/admin/requests/<%= r._id %>/approve" style="display:inline">
+                <button class="btn btn-primary btn-small" type="submit"
+                        <%= (r.productGone || r.productBusy || r.productBlocked) ? 'disabled' : '' %>>
+                  Approve
+                </button>
+              </form>
+              <form method="POST" action="/admin/requests/<%= r._id %>/reject" style="display:inline"
+                    onsubmit="var n = prompt('Reason for declining (optional):'); if (n === null) return false; this.note.value = n; return true;">
+                <input type="hidden" name="note" value="" />
+                <button class="btn btn-ghost btn-small" type="submit">Decline</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Recent decisions</h2>
+  </div>
+
+  <% if (decided.length === 0) { %>
+    <div class="empty"><p>Nothing decided yet.</p></div>
+  <% } else { %>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Instrument</th>
+          <th>Requested by</th>
+          <th>Reason</th>
+          <th>Outcome</th>
+          <th>Decided</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% decided.forEach(function (r) { %>
+          <tr>
+            <td>
+              <span class="row-title"><%= r.productName %></span>
+              <span class="row-sub"><span class="asset-tag"><%= r.assetTag || '—' %></span></span>
+            </td>
+            <td><%= r.userName %></td>
+            <td><%= r.reason || '—' %></td>
+            <td>
+              <% if (r.status === 'approved') { %>
+                <span class="pill pill-available">approved</span>
+              <% } else if (r.status === 'rejected') { %>
+                <span class="pill pill-retired">declined</span>
+              <% } else { %>
+                <span class="pill pill-maintenance">cancelled</span>
+              <% } %>
+              <% if (r.decisionNote) { %><span class="row-sub"><%= r.decisionNote %></span><% } %>
+              <% if (r.decidedBy) { %><span class="row-sub">by <%= r.decidedBy %></span><% } %>
+            </td>
+            <td><%= formatWhen(r.decidedAt || r.updatedAt) %></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Bookings waiting for approval (<%= pendingBookings.length %>)</h2>
+  </div>
+
+  <% if (pendingBookings.length === 0) { %>
+    <div class="empty">
+      <p>No pending bookings. When a normal user books an instrument for a date, it will show up here.</p>
+    </div>
+  <% } else { %>
+    <table class="table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Instrument</th>
+          <th>Booked by</th>
+          <th>For day</th>
+          <th>Reason</th>
+          <th>Asked</th>
+          <th class="right">Decision</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% pendingBookings.forEach(function (b) { %>
+          <tr>
+            <td class="thumb-cell">
+              <%- include('../partials/thumb', { thumbUrl: b.imageUrl, thumbName: b.productName }) %>
+            </td>
+            <td>
+              <span class="row-title"><%= b.productName %></span>
+              <span class="row-sub"><span class="asset-tag"><%= b.assetTag || '—' %></span></span>
+              <% if (b.dayPassed) { %>
+                <span class="pill pill-retired">day passed</span>
+              <% } else if (b.dayTaken) { %>
+                <span class="pill pill-maintenance">day already booked</span>
+              <% } %>
+            </td>
+            <td><%= b.userName %></td>
+            <td><strong><%= formatDay(b.bookedFor) %></strong><span class="row-sub"><%= b.bookedFor %></span></td>
+            <td><%= b.reason || '—' %></td>
+            <td><%= formatWhen(b.createdAt) %></td>
+            <td class="right">
+              <form method="POST" action="/admin/requests/bookings/<%= b._id %>/approve" style="display:inline">
+                <button class="btn btn-primary btn-small" type="submit"
+                        <%= (b.dayPassed || b.dayTaken) ? 'disabled' : '' %>>
+                  Approve
+                </button>
+              </form>
+              <form method="POST" action="/admin/requests/bookings/<%= b._id %>/reject" style="display:inline"
+                    onsubmit="var n = prompt('Reason for declining (optional):'); if (n === null) return false; this.note.value = n; return true;">
+                <input type="hidden" name="note" value="" />
+                <button class="btn btn-ghost btn-small" type="submit">Decline</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Upcoming confirmed bookings (<%= upcomingBookings.length %>)</h2>
+  </div>
+
+  <% if (upcomingBookings.length === 0) { %>
+    <div class="empty"><p>Nothing booked ahead.</p></div>
+  <% } else { %>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Instrument</th>
+          <th>Booked by</th>
+          <th>For day</th>
+          <th>Reason</th>
+          <th class="right"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% upcomingBookings.forEach(function (b) { %>
+          <tr>
+            <td>
+              <span class="row-title"><%= b.productName %></span>
+              <span class="row-sub"><span class="asset-tag"><%= b.assetTag || '—' %></span></span>
+            </td>
+            <td><%= b.userName %></td>
+            <td><strong><%= formatDay(b.bookedFor) %></strong><span class="row-sub"><%= b.bookedFor %></span></td>
+            <td><%= b.reason || '—' %></td>
+            <td class="right">
+              <form method="POST" action="/admin/requests/bookings/<%= b._id %>/cancel" style="display:inline"
+                    onsubmit="return confirm('Cancel this confirmed booking? The person will be notified.');">
+                <button class="btn btn-ghost btn-small" type="submit">Cancel</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</section>

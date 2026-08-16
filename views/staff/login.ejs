@@ -1,0 +1,33 @@
+<div class="auth-card">
+  <div class="auth-side">
+    <span class="brand-mark big">SI</span>
+    <h2>Studio<br />Inventory</h2>
+    <p>See what is on the shelf, take a tool out, or book one for a shoot day.</p>
+    <span class="tag-strip">STU-0001</span>
+  </div>
+
+  <div class="auth-form">
+    <p class="eyebrow">Staff access</p>
+    <h1>Sign in</h1>
+
+    <% if (error) { %>
+      <div class="alert alert-error"><%= error %></div>
+    <% } %>
+
+    <form method="POST" action="/staff/login" novalidate>
+      <label class="field">
+        <span>Work email</span>
+        <input type="email" name="email" value="<%= email %>" placeholder="ravi@office.com" required autofocus />
+      </label>
+
+      <label class="field">
+        <span>Password</span>
+        <input type="password" name="password" placeholder="••••••••" required />
+      </label>
+
+      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+    </form>
+
+    <p class="hint">Same email and password as the Telegram bot. <a href="/">View the shelf without signing in</a>.</p>
+  </div>
+</div>

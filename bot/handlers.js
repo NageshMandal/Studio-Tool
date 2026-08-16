@@ -1,9 +1,15 @@
 const User = require('../models/User');
+const Admin = require('../models/Admin');
 const Product = require('../models/Product');
+const AssignmentRequest = require('../models/AssignmentRequest');
+const Booking = require('../models/Booking');
 const { occupyProduct, releaseProduct } = require('../services/occupancy');
+const { createBooking } = require('../services/booking');
+const approvals = require('../services/approvals');
+const { notifyUser, notifyAdmins } = require('./notify');
 const { setSession, getSession, clearSession } = require('./sessions');
 const views = require('./views');
-const { escapeHtml, formatWhen, formatDuration } = require('../utils/format');
+const { escapeHtml, formatWhen, formatDuration, todayKey, parseDateKey, formatDay } = require('../utils/format');
 
 const HTML = { parse_mode: 'HTML' };
 
@@ -74,6 +80,17 @@ async function sendPhotoGrid(bot, chatId, media) {
 const signedInUser = (chatId) =>
   User.findOne({ telegramChatId: String(chatId), status: 'active' });
 
+const signedInAdmin = (chatId) =>
+  Admin.findOne({ telegramChatId: String(chatId), status: 'active' });
+
+const pendingCounts = async () => ({
+  requests: await AssignmentRequest.countDocuments({ status: 'pending' }),
+  bookings: await Booking.countDocuments({ status: 'pending' }),
+});
+
+const showAdminMenu = async (bot, chatId, admin) =>
+  send(bot, chatId, views.adminMenu(admin, await pendingCounts()));
+
 // Look up the display names for whoever is holding things
 async function holderNames(items) {
   const ids = [...new Set(items.filter((i) => i.assignedTo).map((i) => String(i.assignedTo)))];
@@ -83,6 +100,98 @@ async function holderNames(items) {
 }
 
 const loadProducts = (filter = {}) => Product.find(filter).sort({ name: 1 }).lean();
+
+// The viewer's own open request for an item, if they have one
+const pendingRequestFor = (userId, productId) =>
+  AssignmentRequest.findOne({ user: userId, product: productId, status: 'pending' }).lean();
+
+const pendingRequestsOf = (userId) =>
+  AssignmentRequest.find({ user: userId, status: 'pending' }).sort({ createdAt: -1 }).lean();
+
+// Live bookings from today onwards, soonest first
+const upcomingBookingsOf = (userId) =>
+  Booking.find({
+    user: userId,
+    status: { $in: ['pending', 'confirmed'] },
+    bookedFor: { $gte: todayKey() },
+  })
+    .sort({ bookedFor: 1 })
+    .lean();
+
+/**
+ * Last step of the booking flow: day and reason are both in hand.
+ * Power users get an instant confirmation; normal users' bookings go to
+ * the admin, exactly like a request to take an item out right now.
+ */
+async function finishBooking(bot, chatId, user, productId, dateKey, reason, ack, query) {
+  const product = await Product.findById(productId).lean();
+  clearSession(chatId);
+
+  if (!product) {
+    if (ack) await ack('That instrument is gone');
+    return send(bot, chatId, views.mainMenu(user));
+  }
+
+  try {
+    const booking = await createBooking({ product, user, dateKey, reason, source: 'telegram' });
+
+    if (booking.status === 'confirmed') {
+      if (ack) await ack('Booked');
+      await send(bot, chatId, {
+        text:
+          `📅 <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> is booked for you on <b>${escapeHtml(formatDay(dateKey))}</b>.\n` +
+          `📝 For: ${escapeHtml(booking.reason || '—')}\n\n` +
+          `The item is reserved for you that whole day — on the day, just occupy it as usual.`,
+        photo: product.imageUrl || null,
+      });
+    } else {
+      if (ack) await ack('Booking sent to the admin');
+      await send(bot, chatId, {
+        text:
+          `⏳ Your booking for <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> on <b>${escapeHtml(formatDay(dateKey))}</b> has been sent to the admin.\n` +
+          `📝 For: ${escapeHtml(booking.reason || '—')}\n\n` +
+          `You will get a message here as soon as it is approved or declined.`,
+        photo: product.imageUrl || null,
+      });
+    }
+  } catch (err) {
+    const note =
+      err.code === 'DAY_TAKEN' || err.code === 'DUPLICATE' || err.code === 'PAST_DATE' || err.code === 'RETIRED'
+        ? err.message
+        : 'Could not make that booking';
+    if (ack) await ack(note.slice(0, 190));
+    else await bot.sendMessage(chatId, note);
+  }
+
+  const view = await itemDetailView(product, user);
+  return query ? replace(bot, query, view) : send(bot, chatId, view);
+}
+
+
+// One place that assembles the item screen, pending state included
+async function itemDetailView(item, user) {
+  const holders = await holderNames([item]);
+  const pending = await pendingRequestFor(user._id, item._id);
+  return views.itemDetail(item, holders[String(item.assignedTo)], user, pending);
+}
+
+// Every signed-in admin hears about a new request, with decision buttons
+function pingAdminAboutRequest(request) {
+  notifyAdmins(
+    `🙋 <b>${escapeHtml(request.userName)}</b> is asking for ` +
+      `<b>${escapeHtml(request.productName)}</b> <code>${escapeHtml(request.assetTag || '')}</code>.\n` +
+      (request.reason ? `📝 ${escapeHtml(request.reason)}\n` : '') +
+      `Tap to decide, or use the panel → Requests.`,
+    {
+      inline_keyboard: [
+        [
+          { text: '✅ Approve', callback_data: `aprq:${request._id}` },
+          { text: '❌ Decline', callback_data: `rjrq:${request._id}` },
+        ],
+      ],
+    }
+  );
+}
 
 function groupByCategory(items) {
   const map = new Map();
@@ -103,8 +212,11 @@ const askForEmail = (bot, chatId) =>
   );
 
 /**
- * The last step of taking an item out: the reason is in hand, so occupy it.
- * Shared by the quick-pick buttons and the typed-in reason.
+ * The last step of the take-out flow, once the reason is in hand.
+ *
+ * A power user occupies the item on the spot. A normal user only files a
+ * request: the item stays on the shelf until an admin approves it from the
+ * panel, at which point the bot messages them.
  */
 async function finishOccupy(bot, chatId, user, productId, reason, ack, query) {
   const product = await Product.findById(productId);
@@ -115,27 +227,66 @@ async function finishOccupy(bot, chatId, user, productId, reason, ack, query) {
     return send(bot, chatId, views.mainMenu(user));
   }
 
-  try {
-    await occupyProduct({ product, user, reason, source: 'telegram' });
-    if (ack) await ack('Occupied — it is yours now');
+  if (user.accountType === 'power') {
+    try {
+      await occupyProduct({ product, user, reason, source: 'telegram' });
+      if (ack) await ack('Occupied — it is yours now');
 
-    const confirmation =
-      `📌 <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> is now with you.\n` +
-      `Taken at ${formatWhen(product.occupiedAt)}\n` +
-      `📝 For: ${escapeHtml(product.occupyReason || '—')}\n\n` +
-      `Tap <b>Submit item</b> when you bring it back.`;
+      const confirmation =
+        `📌 <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> is now with you.\n` +
+        `Taken at ${formatWhen(product.occupiedAt)}\n` +
+        `📝 For: ${escapeHtml(product.occupyReason || '—')}\n\n` +
+        `Tap <b>Submit item</b> when you bring it back.`;
 
-    await send(bot, chatId, { text: confirmation, photo: product.imageUrl || null });
-  } catch (err) {
-    // Someone else got there between the tap and the reason
-    const note = err.code === 'ALREADY_OCCUPIED' ? 'Someone just took it' : err.message;
-    if (ack) await ack(note);
-    else await bot.sendMessage(chatId, note);
+      await send(bot, chatId, { text: confirmation, photo: product.imageUrl || null });
+    } catch (err) {
+      // Someone else got there between the tap and the reason
+      const note = err.code === 'ALREADY_OCCUPIED' ? 'Someone just took it' : err.message;
+      if (ack) await ack(note);
+      else await bot.sendMessage(chatId, note);
+    }
+  } else {
+    // Normal account: file a request instead of taking the item
+    const problem = product.assignedTo
+      ? 'Someone just took it'
+      : views.blockedReason(product)
+        ? 'This instrument is not available right now'
+        : null;
+
+    if (problem) {
+      if (ack) await ack(problem);
+      else await bot.sendMessage(chatId, problem);
+    } else {
+      const duplicate = await pendingRequestFor(user._id, product._id);
+      if (duplicate) {
+        const note = 'You have already asked for this one — waiting for the admin';
+        if (ack) await ack(note);
+        else await bot.sendMessage(chatId, note);
+      } else {
+        const request = await AssignmentRequest.create({
+          product: product._id,
+          productName: product.name,
+          assetTag: product.assetTag,
+          imageUrl: product.imageUrl || null,
+          user: user._id,
+          userName: user.name,
+          reason: (reason || '').trim().slice(0, 120) || null,
+        });
+        pingAdminAboutRequest(request);
+
+        if (ack) await ack('Request sent to the admin');
+        const confirmation =
+          `🙋 Your request for <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> has been sent to the admin.\n` +
+          `📝 For: ${escapeHtml(request.reason || '—')}\n\n` +
+          `You will get a message here the moment it is approved or declined. ` +
+          `Please do not take the item until then.`;
+        await send(bot, chatId, { text: confirmation, photo: product.imageUrl || null });
+      }
+    }
   }
 
   const fresh = await Product.findById(productId).lean();
-  const holders = await holderNames([fresh]);
-  const view = views.itemDetail(fresh, holders[String(fresh.assignedTo)], user._id);
+  const view = await itemDetailView(fresh, user);
   return query ? replace(bot, query, view) : send(bot, chatId, view);
 }
 
@@ -151,6 +302,33 @@ async function handleMessage(bot, msg) {
   // Commands
   if (text.startsWith('/')) {
     const command = text.split(/[\s@]/)[0].toLowerCase();
+    const admin = await signedInAdmin(chatId);
+
+    // An admin chat gets the admin menu, not the staff one
+    if (admin) {
+      if (command === '/logout') {
+        clearSession(chatId);
+        admin.telegramChatId = null;
+        admin.telegramLinkedAt = null;
+        await admin.save();
+        return bot.sendMessage(chatId, 'Signed out. Send /start to sign in again.');
+      }
+      if (command === '/help') {
+        return bot.sendMessage(
+          chatId,
+          [
+            '<b>Admin chat</b>',
+            '/start — open the admin menu',
+            '/logout — sign out of this chat',
+            '',
+            'Every new request and booking arrives here with ✅ Approve and ❌ Decline buttons. The full panel is on the website.',
+          ].join('\n'),
+          HTML
+        );
+      }
+      return showAdminMenu(bot, chatId, admin);
+    }
+
     const user = await signedInUser(chatId);
 
     if (command === '/start' || command === '/login') {
@@ -198,13 +376,57 @@ async function handleMessage(bot, msg) {
 
     if (command === '/mine') {
       const mine = await loadProducts({ assignedTo: user._id });
-      return send(bot, chatId, views.myItems(mine));
+      const pending = await pendingRequestsOf(user._id);
+      const bookings = await upcomingBookingsOf(user._id);
+      return send(bot, chatId, views.myItems(mine, pending, bookings));
     }
 
     return send(bot, chatId, views.mainMenu(user));
   }
 
   const session = getSession(chatId);
+
+  // Someone typing a booking date
+  if (session && session.stage === 'awaitBookDate') {
+    const user = await signedInUser(chatId);
+    if (!user) {
+      clearSession(chatId);
+      setSession(chatId, { stage: 'awaitEmail' });
+      return askForEmail(bot, chatId);
+    }
+
+    const dateKey = parseDateKey(text);
+    if (!dateKey) {
+      return bot.sendMessage(chatId, 'I could not read that date. Send it as YYYY-MM-DD or DD-MM-YYYY, e.g. 25-08-2026.');
+    }
+    if (dateKey < todayKey()) {
+      return bot.sendMessage(chatId, 'That day has already passed — send today\'s date or a future one.');
+    }
+
+    const item = await Product.findById(session.productId).lean();
+    if (!item) {
+      clearSession(chatId);
+      return send(bot, chatId, views.mainMenu(user));
+    }
+    setSession(chatId, { stage: 'awaitBookReason', productId: session.productId, dateKey });
+    return send(bot, chatId, views.bookReasonPrompt(item, dateKey));
+  }
+
+  // Someone typing the reason for a booking
+  if (session && session.stage === 'awaitBookReason') {
+    const user = await signedInUser(chatId);
+    if (!user) {
+      clearSession(chatId);
+      setSession(chatId, { stage: 'awaitEmail' });
+      return askForEmail(bot, chatId);
+    }
+
+    const reason = text.slice(0, 120);
+    if (reason.length < 2) {
+      return bot.sendMessage(chatId, 'Please give a slightly longer reason, or tap one of the buttons.');
+    }
+    return finishBooking(bot, chatId, user, session.productId, session.dateKey, reason, null, null);
+  }
 
   // Someone typing the reason they need an item for
   if (session && session.stage === 'awaitReason') {
@@ -236,6 +458,22 @@ async function handleMessage(bot, msg) {
     // The password should not sit in the chat history
     bot.deleteMessage(chatId, msg.message_id).catch(() => {});
 
+    // An admin email signs the chat in as an admin; otherwise it is staff.
+    const admin = await Admin.findOne({ email: session.email, status: 'active' }).select('+password');
+    if (admin && (await admin.matchPassword(text))) {
+      admin.telegramChatId = String(chatId);
+      admin.telegramUsername = msg.from && msg.from.username ? msg.from.username : null;
+      admin.telegramLinkedAt = new Date();
+      await admin.save();
+      clearSession(chatId);
+      await bot.sendMessage(
+        chatId,
+        '🛡 You are signed in as an <b>admin</b>. New requests and bookings will arrive in this chat with approve and decline buttons.',
+        HTML
+      );
+      return showAdminMenu(bot, chatId, admin);
+    }
+
     const user = await User.findOne({ email: session.email }).select('+password');
     const ok = user && user.status === 'active' && (await user.matchPassword(text));
 
@@ -265,6 +503,8 @@ async function handleMessage(bot, msg) {
   }
 
   // Anything else
+  const admin = await signedInAdmin(chatId);
+  if (admin) return showAdminMenu(bot, chatId, admin);
   const user = await signedInUser(chatId);
   if (user) return send(bot, chatId, views.mainMenu(user));
   setSession(chatId, { stage: 'awaitEmail' });
@@ -280,6 +520,97 @@ async function handleCallback(bot, query) {
   const data = query.data || '';
   const ack = (text) => bot.answerCallbackQuery(query.id, text ? { text } : {}).catch(() => {});
 
+  /* ---------- admin taps ---------- */
+  const admin = await signedInAdmin(chatId);
+  if (admin) {
+    if (data === 'adm:menu' || data === 'menu') {
+      await ack();
+      return replace(bot, query, views.adminMenu(admin, await pendingCounts()));
+    }
+
+    if (data === 'adm:logout') {
+      await ack('Signed out');
+      admin.telegramChatId = null;
+      admin.telegramLinkedAt = null;
+      await admin.save();
+      clearSession(chatId);
+      return bot.sendMessage(chatId, 'Signed out. Send /start to sign in again.');
+    }
+
+    if (data === 'adm:reqs') {
+      await ack();
+      const pending = await AssignmentRequest.find({ status: 'pending' }).sort({ createdAt: 1 }).lean();
+      if (pending.length === 0) return replace(bot, query, views.adminEmptyList('requests'));
+      await replace(bot, query, {
+        text: `📥 <b>${pending.length} pending request${pending.length === 1 ? '' : 's'}</b> — oldest first.`,
+        keyboard: { inline_keyboard: [[{ text: '⬅️ Back', callback_data: 'adm:menu' }]] },
+      });
+      for (const r of pending.slice(0, 10)) {
+        await send(bot, chatId, views.adminRequestCard(r));
+      }
+      if (pending.length > 10) {
+        await bot.sendMessage(chatId, `…and ${pending.length - 10} more on the website → Requests.`);
+      }
+      return null;
+    }
+
+    if (data === 'adm:bks') {
+      await ack();
+      const pending = await Booking.find({ status: 'pending' }).sort({ bookedFor: 1, createdAt: 1 }).lean();
+      if (pending.length === 0) return replace(bot, query, views.adminEmptyList('bookings'));
+      await replace(bot, query, {
+        text: `📅 <b>${pending.length} pending booking${pending.length === 1 ? '' : 's'}</b> — soonest day first.`,
+        keyboard: { inline_keyboard: [[{ text: '⬅️ Back', callback_data: 'adm:menu' }]] },
+      });
+      for (const b of pending.slice(0, 10)) {
+        await send(bot, chatId, views.adminBookingCard(b));
+      }
+      if (pending.length > 10) {
+        await bot.sendMessage(chatId, `…and ${pending.length - 10} more on the website → Requests.`);
+      }
+      return null;
+    }
+
+    if (data === 'adm:busy') {
+      await ack();
+      const busy = await loadProducts({ assignedTo: { $ne: null } });
+      const view = views.occupiedList(busy, await holderNames(busy));
+      view.keyboard = { inline_keyboard: [[{ text: '⬅️ Back', callback_data: 'adm:menu' }]] };
+      return replace(bot, query, view);
+    }
+
+    // ✅ / ❌ on a request or booking card — one decision engine for bot and web
+    const decide =
+      data.startsWith('aprq:') ? () => approvals.approveRequest(data.slice(5), admin.email) :
+      data.startsWith('rjrq:') ? () => approvals.rejectRequest(data.slice(5), admin.email, 'Declined from Telegram') :
+      data.startsWith('apbk:') ? () => approvals.approveBooking(data.slice(5), admin.email) :
+      data.startsWith('rjbk:') ? () => approvals.rejectBooking(data.slice(5), admin.email, 'Declined from Telegram') :
+      null;
+
+    if (decide) {
+      const result = await decide();
+      await ack(result.message.slice(0, 190));
+      // Freeze the card so the buttons cannot be tapped twice
+      const outcome = result.ok
+        ? (data.startsWith('rj') ? '❌ Declined' : '✅ Approved')
+        : `⚠️ ${result.message}`;
+      const frozen = `${escapeHtml(query.message.text)}\n\n<b>${escapeHtml(outcome)} by ${escapeHtml(admin.name)}</b>`;
+      await bot
+        .editMessageText(frozen, {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          parse_mode: 'HTML',
+        })
+        .catch(() => {});
+      return null;
+    }
+
+    // Any other tap in an admin chat goes back to the admin menu
+    await ack();
+    return replace(bot, query, views.adminMenu(admin, await pendingCounts()));
+  }
+
+  /* ---------- staff taps ---------- */
   const user = await signedInUser(chatId);
   if (!user) {
     await ack('Please sign in again');
@@ -320,7 +651,9 @@ async function handleCallback(bot, query) {
   if (data === 'mine') {
     await ack();
     const mine = await loadProducts({ assignedTo: user._id });
-    return replace(bot, query, views.myItems(mine));
+    const pending = await pendingRequestsOf(user._id);
+    const bookings = await upcomingBookingsOf(user._id);
+    return replace(bot, query, views.myItems(mine, pending, bookings));
   }
 
   if (data === 'busy') {
@@ -342,11 +675,10 @@ async function handleCallback(bot, query) {
     await ack();
     const item = await Product.findById(data.slice(5)).lean();
     if (!item) return replace(bot, query, views.mainMenu(user));
-    const holders = await holderNames([item]);
-    return replace(bot, query, views.itemDetail(item, holders[String(item.assignedTo)], user._id));
+    return replace(bot, query, await itemDetailView(item, user));
   }
 
-  // Tapping "Occupy now" asks what it is for before handing the item over
+  // Tapping "Occupy now" / "Request this item" asks what it is for first
   if (data.startsWith('occ:')) {
     const product = await Product.findById(data.slice(4)).lean();
     if (!product) {
@@ -355,13 +687,115 @@ async function handleCallback(bot, query) {
     }
     if (product.assignedTo) {
       await ack('Someone just took it');
-      const holders = await holderNames([product]);
-      return replace(bot, query, views.itemDetail(product, holders[String(product.assignedTo)], user._id));
+      return replace(bot, query, await itemDetailView(product, user));
+    }
+    if (user.accountType !== 'power') {
+      const duplicate = await pendingRequestFor(user._id, product._id);
+      if (duplicate) {
+        await ack('You have already asked for this one');
+        return replace(bot, query, await itemDetailView(product, user));
+      }
     }
 
     await ack();
     setSession(chatId, { stage: 'awaitReason', productId: String(product._id) });
-    return send(bot, chatId, views.reasonPrompt(product));
+    return send(bot, chatId, views.reasonPrompt(product, user.accountType !== 'power'));
+  }
+
+  // "Book for a date" — show the day picker
+  if (data.startsWith('bk:')) {
+    const product = await Product.findById(data.slice(3)).lean();
+    if (!product) {
+      await ack('That instrument is gone');
+      return replace(bot, query, views.mainMenu(user));
+    }
+    if (product.condition === 'retired') {
+      await ack('This instrument is retired');
+      return replace(bot, query, await itemDetailView(product, user));
+    }
+    await ack();
+    clearSession(chatId);
+    return replace(bot, query, views.bookDayPrompt(product, user.accountType === 'power'));
+  }
+
+  // A tapped day
+  if (data.startsWith('bkd:')) {
+    const [, productId, dateKey] = data.split(':');
+    const product = await Product.findById(productId).lean();
+    if (!product) {
+      await ack('That instrument is gone');
+      return replace(bot, query, views.mainMenu(user));
+    }
+    await ack();
+    setSession(chatId, { stage: 'awaitBookReason', productId, dateKey });
+    return replace(bot, query, views.bookReasonPrompt(product, dateKey));
+  }
+
+  // "Type another date"
+  if (data.startsWith('bkdown:')) {
+    await ack();
+    setSession(chatId, { stage: 'awaitBookDate', productId: data.slice(7) });
+    return bot.sendMessage(chatId, 'Send the date as YYYY-MM-DD or DD-MM-YYYY, e.g. 25-08-2026.');
+  }
+
+  // A tapped quick reason for a booking
+  if (data.startsWith('bkr:')) {
+    const [, productId, dateKey, index] = data.split(':');
+    const reason = views.QUICK_REASONS[Number(index)];
+    return finishBooking(bot, chatId, user, productId, dateKey, reason, ack, query);
+  }
+
+  // "Type my own reason" for a booking
+  if (data.startsWith('bkrown:')) {
+    const [, productId, dateKey] = data.split(':');
+    await ack();
+    setSession(chatId, { stage: 'awaitBookReason', productId, dateKey });
+    return bot.sendMessage(chatId, 'Send the reason in a few words (up to 120 characters).');
+  }
+
+  // Cancelling one of your own bookings
+  if (data.startsWith('bkcxl:')) {
+    const booking = await Booking.findOne({
+      _id: data.slice(6),
+      user: user._id,
+      status: { $in: ['pending', 'confirmed'] },
+    });
+    if (!booking) {
+      await ack('That booking has already been dealt with');
+    } else {
+      booking.status = 'cancelled';
+      booking.decidedAt = new Date();
+      await booking.save();
+      await ack('Booking cancelled');
+    }
+    const mine = await loadProducts({ assignedTo: user._id });
+    const pending = await pendingRequestsOf(user._id);
+    const bookings = await upcomingBookingsOf(user._id);
+    return replace(bot, query, views.myItems(mine, pending, bookings));
+  }
+
+  // A normal user cancelling their own pending request
+  if (data.startsWith('cxl:')) {
+    const request = await AssignmentRequest.findOne({
+      _id: data.slice(4),
+      user: user._id,
+      status: 'pending',
+    });
+    if (!request) {
+      await ack('That request has already been dealt with');
+    } else {
+      request.status = 'cancelled';
+      request.decidedAt = new Date();
+      await request.save();
+      await ack('Request cancelled');
+    }
+
+    const item = request ? await Product.findById(request.product).lean() : null;
+    if (item) return replace(bot, query, await itemDetailView(item, user));
+    const mine = await loadProducts({ assignedTo: user._id });
+    const pending = await pendingRequestsOf(user._id);
+    const bookings = await upcomingBookingsOf(user._id);
+    return replace(bot, query, views.myItems(mine, pending, bookings));
   }
 
   // A tapped quick reason
@@ -388,8 +822,7 @@ async function handleCallback(bot, query) {
     if (!product.assignedTo || String(product.assignedTo) !== String(user._id)) {
       await ack('That one is not with you');
       const fresh = await Product.findById(product._id).lean();
-      const holders = await holderNames([fresh]);
-      return replace(bot, query, views.itemDetail(fresh, holders[String(fresh.assignedTo)], user._id));
+      return replace(bot, query, await itemDetailView(fresh, user));
     }
 
     const log = await releaseProduct({ product, source: 'telegram' });
@@ -401,7 +834,7 @@ async function handleCallback(bot, query) {
     );
 
     const fresh = await Product.findById(product._id).lean();
-    return replace(bot, query, views.itemDetail(fresh, null, user._id));
+    return replace(bot, query, await itemDetailView(fresh, user));
   }
 
   return ack();

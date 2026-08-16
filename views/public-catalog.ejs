@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Studio shelf · Studio Inventory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="staff-body">
+  <header class="staff-topbar">
+    <span class="brand">
+      <span class="brand-mark">SI</span>
+      <span class="brand-text">Studio <strong>Inventory</strong></span>
+    </span>
+    <div class="staff-topbar-right">
+      <a class="btn btn-primary btn-small" href="/staff/login">Staff sign in</a>
+      <a class="btn btn-ghost btn-small" href="/login">Admin</a>
+    </div>
+  </header>
+
+  <main class="staff-main">
+    <section class="stat-grid">
+      <div class="stat">
+        <span class="stat-label">On the register</span>
+        <span class="stat-value"><%= counts.total %></span>
+        <span class="stat-note">instruments</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Available</span>
+        <span class="stat-value"><%= counts.available %></span>
+        <span class="stat-note">on the shelf now</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Occupied</span>
+        <span class="stat-value"><%= counts.occupied %></span>
+        <span class="stat-note">out with someone</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">In maintenance</span>
+        <span class="stat-value"><%= counts.maintenance %></span>
+        <span class="stat-note">not takeable</span>
+      </div>
+    </section>
+
+    <% groups.forEach(function (g) { %>
+      <section class="panel">
+        <div class="panel-head"><h2><%= g.category %> <span class="row-sub"><%= g.available %> of <%= g.items.length %> free</span></h2></div>
+        <table class="table">
+          <tbody>
+            <% g.items.forEach(function (p) {
+                 var retired = p.condition === 'retired';
+                 var blocked = retired || p.status === 'maintenance' || p.condition === 'needs-repair';
+            %>
+              <tr>
+                <td class="thumb-cell"><%- include('partials/thumb', { thumbUrl: p.imageUrl, thumbName: p.name }) %></td>
+                <td>
+                  <span class="row-title"><%= p.name %></span>
+                  <span class="row-sub">
+                    <span class="asset-tag"><%= p.assetTag %></span>
+                    <% if (p.brand || p.model) { %> · <%= [p.brand, p.model].filter(Boolean).join(' ') %><% } %>
+                  </span>
+                </td>
+                <td class="right">
+                  <% if (retired) { %>
+                    <span class="pill pill-retired">retired</span>
+                  <% } else if (blocked) { %>
+                    <span class="pill pill-maintenance">in maintenance</span>
+                  <% } else if (p.assignedTo) { %>
+                    <span class="pill pill-assigned">occupied</span>
+                    <span class="row-sub">with <%= holderMap[String(p.assignedTo)] || 'someone' %> · since <%= formatWhen(p.occupiedAt) %></span>
+                  <% } else { %>
+                    <span class="pill pill-available">available</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </section>
+    <% }); %>
+
+    <% if (groups.length === 0) { %>
+      <section class="panel"><div class="empty"><p>Nothing is on the register yet.</p></div></section>
+    <% } %>
+
+    <p class="hint" style="text-align:center">Sign in as staff to occupy an item or book one for a date.</p>
+  </main>
+</body>
+</html>

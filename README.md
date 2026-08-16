@@ -75,6 +75,80 @@ The bot runs inside the same Node process using long polling, so it needs no pub
 
 Commands: `/start`, `/items`, `/mine`, `/logout`, `/help`.
 
+## Account types: power vs normal
+
+Every staff member is either a **power** or a **normal** account. You set this on the People page (Add / Edit person → **Account type**). New and existing people default to **normal**.
+
+- **Power user** — taps **📌 Occupy now** in the bot and the item is theirs immediately, exactly as before. No permission needed.
+- **Normal user** — sees **🙋 Request this item** instead. Tapping it asks for a reason as usual, but nothing is handed over: a request is filed and sits at *pending* until you decide. The bot tells them their request has gone to the admin and that they should not take the item yet.
+
+**Approving and declining** happens on the new **Requests** page (`/admin/requests`). The sidebar link carries a red badge with the pending count. The queue is oldest-first; each row shows the item (with its picture), who is asking, their reason, and how long ago they asked. **Approve** assigns the item through the same code path as every other assignment, so the usage log records it like any admin assignment (`source: admin`) with the requester's reason. **Decline** lets you type an optional note.
+
+**The user is notified on Telegram either way** — "✅ Approved! The admin has assigned … to you" or "❌ your request was declined", including your note if you wrote one. Returning an approved item works exactly like any other: **Submit item** from `/mine`.
+
+Rules the request flow enforces:
+
+- A normal user can never occupy anything directly — the request is the only way.
+- One pending request per person per item; asking again just reminds them it is pending.
+- A pending request can be cancelled by the user from the item screen or `/mine`.
+- If the item is taken, retired, or in maintenance by the time you press Approve, the approval safely fails: the request is auto-declined with the reason and the user is told.
+- Deleting a person or an instrument cancels its pending requests.
+- Requests already decided stay visible under **Recent decisions** on the same page.
+
+Optional: set `ADMIN_TELEGRAM_CHAT_ID` in `.env` to your own Telegram chat id and the bot messages you the moment a new request comes in. Leave it unset and the Requests page badge is your inbox.
+
+## Admins in the Telegram bot
+
+The **same bot** now serves admins too. An admin opens the bot, sends `/start`, and signs in with their **admin email and password** — the bot recognises the email as an admin account and switches that chat into admin mode.
+
+What an admin chat gets:
+
+- **Every notification, instantly.** Each new occupy request and each new booking from a normal user is pushed to **every signed-in admin** the moment it is made — whether it came from the bot or the website — with **✅ Approve / ❌ Decline buttons right on the message**. One tap decides it; the person is notified; the card is stamped with who decided so another admin cannot decide it twice.
+- **An admin menu** (`/start`): pending requests and pending bookings as tappable cards with the same buttons, plus everything occupied right now.
+- The web panel's Requests page and the bot buttons share one decision engine, so a request approved on the website shows "already dealt with" if someone taps it in Telegram, and vice versa.
+- `/logout` unlinks the chat.
+
+`ADMIN_TELEGRAM_CHAT_ID` in `.env` still works and is simply included in the broadcast — handy for the root admin, whose account lives in `.env` and cannot sign in to the bot by email.
+
+## Multiple admins
+
+Admins can create more admins on the new **Admins** page (`/admin/admins`):
+
+- Add an admin with a name, email and password. They can immediately sign in to the **web panel** at `/login` and to the **Telegram bot** with those credentials — same powers as you.
+- Inline password reset, activate/deactivate, and delete. You cannot deactivate or delete **yourself**, and deactivating an admin also unlinks their Telegram chat so they stop receiving notifications.
+- The **root admin** from `.env` is listed as a fixed row for reference but is managed only through `.env` — it can never be edited or removed from the panel.
+- Every decision records **which admin made it** (shown under Recent decisions on the Requests page).
+
+## Advance bookings (book an item for a date)
+
+Anyone can reserve an instrument for a future day — from the Telegram bot (**📅 Book for a date** on any item) or from the staff website. The same account-type rule applies:
+
+- **Power user** — the booking is confirmed instantly.
+- **Normal user** — the booking goes to the admin as *pending*, and the person is told the decision on Telegram.
+
+How it works:
+
+- A booking is for a **whole day**, stored as a date like `2026-08-25`. In the bot you tap Today/Tomorrow/this-week buttons or type a date (`YYYY-MM-DD` or `DD-MM-YYYY`); on the website you use a date picker.
+- Bookings must be for **today or later** — the past cannot be booked.
+- One day, one holder: a day already confirmed for someone else cannot be double-booked, and approving a pending booking for a taken day fails safely.
+- A booking **reserves priority**, it does not occupy the item by itself. On the day, the person occupies it as usual — and while a confirmed booking is live for today, **nobody else can occupy that item** (the admin panel can still override).
+- An occupied item can still be booked for a future day.
+- Everyone sees and cancels their own bookings under `/mine` in the bot or on the staff site. Admin decides pending bookings and can cancel confirmed ones on the **Requests** page, which also lists everything booked ahead. The sidebar badge counts pending bookings too.
+
+## Staff website (`/staff`)
+
+Staff can use a browser instead of (or as well as) the bot. They sign in at `/staff/login` with the **same email and password** as the Telegram bot. The portal shows:
+
+- What they are holding, with a **Submit item** button to return things.
+- Their pending requests and upcoming bookings, each with a cancel button.
+- The full catalog by category with live status — and per item, **Occupy now** (power) or **Request item** (normal, goes to the admin dashboard), plus **Book a date**.
+
+The web portal enforces exactly the same rules as the bot — same account types, same approval flow, same booking checks — because both go through the same code. Web actions appear in the usage log with `source: web`. The staff session is a separate cookie from the admin one, so both can be signed in side by side.
+
+## Public shelf view (`/`)
+
+The home page is now a **public, no-login catalog**: every instrument grouped by category with its live status — available, occupied (with holder and since when), in maintenance, or retired — plus totals at the top. Handy for a wall-mounted screen in the studio. Buttons in the header lead to the staff and admin sign-ins. Viewing is all it allows; taking or booking anything requires signing in.
+
 **Rules the bot enforces**
 
 - Only active staff can sign in; deactivated people are refused.

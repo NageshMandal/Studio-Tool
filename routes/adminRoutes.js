@@ -5,6 +5,8 @@ const { protect } = require('../middleware/auth');
 const products = require('../controllers/productController');
 const users = require('../controllers/userController');
 const logs = require('../controllers/logController');
+const requests = require('../controllers/requestController');
+const adminAccounts = require('../controllers/adminAccountController');
 
 // Everything below this line needs a valid admin JWT
 router.use(protect);
@@ -14,6 +16,24 @@ router.get('/dashboard', products.dashboard);
 
 // Daily usage log
 router.get('/logs', logs.daily);
+
+// Assignment requests from normal (non-power) users
+router.get('/requests', requests.list);
+router.post('/requests/:id/approve', requests.approve);
+router.post('/requests/:id/reject', requests.reject);
+
+// Advance bookings
+router.post('/requests/bookings/:id/approve', requests.approveBooking);
+router.post('/requests/bookings/:id/reject', requests.rejectBooking);
+router.post('/requests/bookings/:id/cancel', requests.cancelBooking);
+
+// Admin accounts (the root .env admin is managed in .env, not here)
+router.get('/admins', adminAccounts.list);
+router.get('/admins/new', adminAccounts.newForm);
+router.post('/admins', adminAccounts.create);
+router.patch('/admins/:id/status', adminAccounts.toggleStatus);
+router.patch('/admins/:id/password', adminAccounts.resetPassword);
+router.delete('/admins/:id', adminAccounts.remove);
 
 // Instruments
 router.get('/products', products.list);

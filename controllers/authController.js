@@ -1,12 +1,20 @@
 const jwt = require('jsonwebtoken');
+const Admin = require('../models/Admin');
 
-const signToken = () =>
+/**
+ * Two kinds of admin can sign in here:
+ *  - the root admin from `.env` (ADMIN_EMAIL / ADMIN_PASSWORD), always there;
+ *  - any active admin account created on the Admins page.
+ * Both get the same role in the token and the same powers in the panel.
+ */
+
+const signToken = (admin) =>
   jwt.sign(
     {
-      id: 'admin',
+      id: admin.id,
       role: 'admin',
-      name: process.env.ADMIN_NAME || 'Admin',
-      email: process.env.ADMIN_EMAIL,
+      name: admin.name,
+      email: admin.email,
     },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '1d' }
@@ -19,9 +27,27 @@ const cookieOptions = () => ({
   maxAge: Number(process.env.COOKIE_EXPIRES_DAYS || 1) * 24 * 60 * 60 * 1000,
 });
 
-const credentialsMatch = (email = '', password = '') =>
-  email.trim().toLowerCase() === String(process.env.ADMIN_EMAIL).toLowerCase() &&
-  password === process.env.ADMIN_PASSWORD;
+/**
+ * Resolve the submitted credentials to an admin identity, or null.
+ * Checks the `.env` root admin first, then the Admin collection.
+ */
+async function resolveAdmin(email = '', password = '') {
+  const cleanEmail = String(email).trim().toLowerCase();
+
+  if (
+    cleanEmail === String(process.env.ADMIN_EMAIL).toLowerCase() &&
+    password === process.env.ADMIN_PASSWORD
+  ) {
+    return { id: 'admin', name: process.env.ADMIN_NAME || 'Admin', email: process.env.ADMIN_EMAIL };
+  }
+
+  const admin = await Admin.findOne({ email: cleanEmail, status: 'active' }).select('+password');
+  if (admin && (await admin.matchPassword(password))) {
+    return { id: String(admin._id), name: admin.name, email: admin.email };
+  }
+
+  return null;
+}
 
 // GET /login
 exports.loginPage = (req, res) => {
@@ -34,44 +60,54 @@ exports.loginPage = (req, res) => {
 };
 
 // POST /login  (renders a page)
-exports.login = (req, res) => {
-  const { email, password } = req.body;
+exports.login = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).render('login', {
-      title: 'Sign in',
-      layout: 'auth-layout',
-      error: 'Enter both email and password',
-      email: email || '',
-    });
+    if (!email || !password) {
+      return res.status(400).render('login', {
+        title: 'Sign in',
+        layout: 'auth-layout',
+        error: 'Enter both email and password',
+        email: email || '',
+      });
+    }
+
+    const admin = await resolveAdmin(email, password);
+    if (!admin) {
+      return res.status(401).render('login', {
+        title: 'Sign in',
+        layout: 'auth-layout',
+        error: 'That email and password combination is not recognised',
+        email,
+      });
+    }
+
+    res.cookie('token', signToken(admin), cookieOptions());
+    res.redirect('/admin/dashboard');
+  } catch (err) {
+    next(err);
   }
-
-  if (!credentialsMatch(email, password)) {
-    return res.status(401).render('login', {
-      title: 'Sign in',
-      layout: 'auth-layout',
-      error: 'That email and password combination is not recognised',
-      email,
-    });
-  }
-
-  res.cookie('token', signToken(), cookieOptions());
-  res.redirect('/admin/dashboard');
 };
 
 // POST /api/auth/login  (returns a token)
-exports.apiLogin = (req, res) => {
-  const { email, password } = req.body;
-  if (!credentialsMatch(email, password)) {
-    return res.status(401).json({ success: false, message: 'Invalid credentials' });
+exports.apiLogin = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    const admin = await resolveAdmin(email, password);
+    if (!admin) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+    const token = signToken(admin);
+    res.cookie('token', token, cookieOptions());
+    res.json({
+      success: true,
+      token,
+      admin: { name: admin.name, email: admin.email, role: 'admin' },
+    });
+  } catch (err) {
+    next(err);
   }
-  const token = signToken();
-  res.cookie('token', token, cookieOptions());
-  res.json({
-    success: true,
-    token,
-    admin: { name: process.env.ADMIN_NAME, email: process.env.ADMIN_EMAIL, role: 'admin' },
-  });
 };
 
 // GET /logout

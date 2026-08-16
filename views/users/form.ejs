@@ -58,6 +58,14 @@
           <option value="inactive" <%= user.status === 'inactive' ? 'selected' : '' %>>Inactive</option>
         </select>
       </label>
+
+      <label class="field">
+        <span>Account type</span>
+        <select name="accountType">
+          <option value="normal" <%= user.accountType !== 'power' ? 'selected' : '' %>>Normal — needs admin approval to take items</option>
+          <option value="power" <%= user.accountType === 'power' ? 'selected' : '' %>>Power — can occupy items instantly from Telegram</option>
+        </select>
+      </label>
     </div>
 
     <div class="form-actions">

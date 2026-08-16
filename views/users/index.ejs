@@ -49,6 +49,11 @@
           <tr>
             <td>
               <a class="row-title" href="/admin/users/<%= u._id %>/edit"><%= u.name %></a>
+              <% if (u.accountType === 'power') { %>
+                <span class="pill pill-power">power</span>
+              <% } else { %>
+                <span class="pill pill-normal">normal</span>
+              <% } %>
               <span class="row-sub"><%= u.email %></span>
             </td>
             <td><span class="asset-tag"><%= u.employeeId || '—' %></span></td>
