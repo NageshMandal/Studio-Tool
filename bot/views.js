@@ -84,9 +84,9 @@ function bookDayPrompt(item, isPower) {
   rows.push([{ text: '✍️ Type another date', callback_data: `bkdown:${item._id}` }]);
   rows.push([{ text: '✖️ Cancel', callback_data: `item:${item._id}` }]);
 
-  const tail = isPower
-    ? 'Your booking is confirmed instantly — the item is reserved for you that whole day.'
-    : 'Your booking goes to the admin for approval. You will get a message here with the decision.';
+  const tail =
+    'Every booking is confirmed by the admin. If the item is with someone right now, ' +
+    'they will first be asked to submit it — the admin decides once it is back.';
 
   return {
     text:
@@ -348,7 +348,12 @@ function myItems(items, pendingRequests = [], bookings = [], claims = []) {
   if (bookings.length > 0) {
     const lines = bookings.map((b) => {
       const icon = b.status === 'confirmed' ? '📅' : '⏳';
-      const state = b.status === 'confirmed' ? 'confirmed' : 'waiting for admin';
+      const state =
+        b.status === 'confirmed'
+          ? 'confirmed'
+          : b.awaitingReturn
+            ? 'waiting for the item to be submitted'
+            : 'waiting for admin';
       const head = `${icon} <b>${escapeHtml(b.productName)}</b> — ${escapeHtml(formatDay(b.bookedFor))} (${state})\n   <code>${escapeHtml(b.assetTag || '')}</code>`;
       return b.reason ? `${head}\n   📝 ${escapeHtml(b.reason)}` : head;
     });
@@ -439,6 +444,7 @@ function adminBookingCard(b) {
       `<b>${escapeHtml(b.productName)}</b> <code>${escapeHtml(b.assetTag || '')}</code>\n` +
       `For <b>${escapeHtml(formatDay(b.bookedFor))}</b>\n` +
       (b.reason ? `\u{1F4DD} ${escapeHtml(b.reason)}\n` : '') +
+      (b.awaitingReturn ? `\u{1F4E6} Item is still out — the holder has been asked to submit it.\n` : '') +
       `Asked ${formatWhen(b.createdAt)}`,
     keyboard: {
       inline_keyboard: [

@@ -137,22 +137,25 @@ async function finishBooking(bot, chatId, user, productId, dateKey, reason, ack,
   try {
     const booking = await createBooking({ product, user, dateKey, reason, source: 'telegram' });
 
-    if (booking.status === 'confirmed') {
-      if (ack) await ack('Booked');
+    if (booking.awaitingReturn) {
+      // The item is out — its holder has been asked to submit it first
+      if (ack) await ack('Booking filed — the holder has been asked to submit it');
       await send(bot, chatId, {
         text:
-          `📅 <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> is booked for you on <b>${escapeHtml(formatDay(dateKey))}</b>.\n` +
+          `⏳ Your booking for <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> on <b>${escapeHtml(formatDay(dateKey))}</b> has been filed.\n` +
           `📝 For: ${escapeHtml(booking.reason || '—')}\n\n` +
-          `The item is reserved for you that whole day — on the day, just occupy it as usual.`,
+          `The instrument is currently with <b>${escapeHtml(booking.holderNameAtCreation || 'someone')}</b> — ` +
+          `they have been asked to submit it once their work is done. ` +
+          `The admin will then confirm or cancel your booking, and you will get a message here either way.`,
         photo: product.imageUrl || null,
       });
     } else {
       if (ack) await ack('Booking sent to the admin');
       await send(bot, chatId, {
         text:
-          `⏳ Your booking for <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> on <b>${escapeHtml(formatDay(dateKey))}</b> has been sent to the admin.\n` +
+          `⏳ Your booking for <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> on <b>${escapeHtml(formatDay(dateKey))}</b> has been sent to the admin to confirm.\n` +
           `📝 For: ${escapeHtml(booking.reason || '—')}\n\n` +
-          `You will get a message here as soon as it is approved or declined.`,
+          `You will get a message here as soon as it is confirmed or cancelled.`,
         photo: product.imageUrl || null,
       });
     }

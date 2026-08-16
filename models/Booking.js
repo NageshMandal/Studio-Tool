@@ -33,6 +33,14 @@ const bookingSchema = new mongoose.Schema(
       default: 'pending',
     },
 
+    /**
+     * True while the instrument is still out with someone else: the holder
+     * has been asked to submit it, and the admins are only notified to
+     * confirm/cancel once it comes back. False from the start when the item
+     * was free (admins are notified immediately).
+     */
+    awaitingReturn: { type: Boolean, default: false },
+
     source: { type: String, enum: ['telegram', 'web'], default: 'telegram' },
 
     decidedAt: { type: Date, default: null },

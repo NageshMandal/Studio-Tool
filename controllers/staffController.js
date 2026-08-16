@@ -99,6 +99,21 @@ exports.portal = async (req, res, next) => {
       {}
     );
 
+    // Bookings waiting for ME to submit an item I am holding
+    const myItemIds = myItems.map((p) => p._id);
+    const bookingsAwaitingMe = myItemIds.length
+      ? await Booking.find({
+          product: { $in: myItemIds },
+          status: 'pending',
+          awaitingReturn: true,
+        }).sort({ bookedFor: 1 }).lean()
+      : [];
+    const awaitingByProduct = bookingsAwaitingMe.reduce((acc, b) => {
+      const key = String(b.product);
+      (acc[key] = acc[key] || []).push(b);
+      return acc;
+    }, {});
+
     // Next-in-line claims: who is waiting on what
     const waitingClaims = await NextClaim.find({ status: 'waiting' }).lean();
     const claimByProduct = waitingClaims.reduce(
@@ -138,6 +153,7 @@ exports.portal = async (req, res, next) => {
       pendingByProduct,
       claimByProduct,
       myClaims,
+      awaitingByProduct,
       bookedTodayByProduct,
       todayKey: todayKey(),
       message: req.query.message || null,
@@ -243,9 +259,9 @@ exports.book = async (req, res, next) => {
       const booking = await createBooking({ product, user, dateKey, reason, source: 'web' });
       return back(
         res,
-        booking.status === 'confirmed'
-          ? `Booked — ${product.name} is reserved for you on ${formatDay(dateKey)}`
-          : `Booking sent to the admin for ${formatDay(dateKey)} — you will be notified on Telegram`
+        booking.awaitingReturn
+          ? `Booking filed for ${formatDay(dateKey)} — ${booking.holderNameAtCreation || 'the holder'} has been asked to submit the item; the admin will then confirm`
+          : `Booking sent to the admin to confirm for ${formatDay(dateKey)} — you will be notified on Telegram`
       );
     } catch (err) {
       return back(res, err.message);

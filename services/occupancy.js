@@ -89,6 +89,15 @@ async function releaseProduct({ product, source = 'telegram', note, claims = tru
 
   if (claims) await fulfillNextClaim(product);
 
+  // Bookings that were waiting for this instrument to come back now go to
+  // the admins for a confirm/cancel decision (lazy require avoids a cycle)
+  try {
+    const { activateHeldBookings } = require('./booking');
+    await activateHeldBookings(product);
+  } catch (err) {
+    console.error('Could not activate held bookings:', err.message);
+  }
+
   return openLog;
 }
 

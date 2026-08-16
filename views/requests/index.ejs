@@ -145,6 +145,9 @@
               <% } else if (b.dayTaken) { %>
                 <span class="pill pill-maintenance">day already booked</span>
               <% } %>
+              <% if (b.awaitingReturn) { %>
+                <span class="pill pill-assigned">waiting for holder to submit</span>
+              <% } %>
             </td>
             <td><%= b.userName %></td>
             <td><strong><%= formatDay(b.bookedFor) %></strong><span class="row-sub"><%= b.bookedFor %></span></td>

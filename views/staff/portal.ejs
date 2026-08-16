@@ -21,6 +21,9 @@
               <% if (holdClaim) { %>
                 <span class="row-sub">⚡ <strong><%= holdClaim.userName %></strong> is waiting for this<% if (holdClaim.reason) { %> — 📝 <%= holdClaim.reason %><% } %></span>
               <% } %>
+              <% (awaitingByProduct[String(p._id)] || []).forEach(function (ab) { %>
+                <span class="row-sub">📅 <strong><%= ab.userName %></strong> booked this for <strong><%= formatDay(ab.bookedFor) %></strong> — please submit it when your work is done</span>
+              <% }); %>
             </td>
             <td class="right staff-actions">
               <% var holdClaim2 = claimByProduct[String(p._id)]; %>
@@ -83,7 +86,7 @@
               <span class="row-title">📅 <%= b.productName %> — <%= formatDay(b.bookedFor) %></span>
               <span class="row-sub">
                 <span class="asset-tag"><%= b.assetTag || '—' %></span> ·
-                <% if (b.status === 'confirmed') { %><span class="pill pill-available">confirmed</span><% } else { %><span class="pill pill-maintenance">waiting for admin</span><% } %>
+                <% if (b.status === 'confirmed') { %><span class="pill pill-available">confirmed</span><% } else if (b.awaitingReturn) { %><span class="pill pill-assigned">waiting for the item to be submitted</span><% } else { %><span class="pill pill-maintenance">waiting for admin</span><% } %>
               </span>
               <% if (b.reason) { %><span class="row-sub">📝 <%= b.reason %></span><% } %>
             </td>
@@ -185,9 +188,7 @@
                   <form class="staff-popform" method="POST" action="/staff/book/<%= p._id %>">
                     <input type="date" name="date" min="<%= todayKey %>" required />
                     <input type="text" name="reason" maxlength="120" placeholder="What is it for?" required minlength="2" />
-                    <button class="btn btn-primary btn-small" type="submit">
-                      <%= user.accountType === 'power' ? 'Book it' : 'Ask admin' %>
-                    </button>
+                    <button class="btn btn-primary btn-small" type="submit">Send booking</button>
                   </form>
                 </details>
               <% } %>

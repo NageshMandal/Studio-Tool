@@ -132,19 +132,14 @@ Rules: power accounts only; one waiting claimant per instrument (first come); th
 
 ## Advance bookings (book an item for a date)
 
-Anyone can reserve an instrument for a future day — from the Telegram bot (**📅 Book for a date** on any item) or from the staff website. The same account-type rule applies:
+Anyone can ask to reserve an instrument for a future day — from the Telegram bot (**📅 Book for a date** on any item) or from the staff website (date picker). **Every booking, from every account type, is confirmed or cancelled by an admin** — power accounts skip approval only for taking items out now, never for bookings.
 
-- **Power user** — the booking is confirmed instantly.
-- **Normal user** — the booking goes to the admin as *pending*, and the person is told the decision on Telegram.
+What happens right after a booking is filed depends on where the instrument is:
 
-How it works:
+- **Item on the shelf** → every signed-in admin is notified immediately — a Telegram card with **✅ Confirm / ❌ Cancel booking** buttons, and the same booking on the panel's Requests page.
+- **Item out with someone else** → that person is notified first, on Telegram (with a one-tap **✅ Submit item now** button) and on their staff page: "*X booked this for Thu 20 Aug — please submit it when your work is done.*" The admins are **not** asked yet. The moment the holder submits the item — button, bot, or website — the admins get the notification (Telegram card + dashboard) to confirm or cancel, knowing the instrument is really back. Until then the booking shows "*waiting for the item to be submitted*" everywhere: the booker's /mine, the staff site, and the admin panel.
 
-- A booking is for a **whole day**, stored as a date like `2026-08-25`. In the bot you tap Today/Tomorrow/this-week buttons or type a date (`YYYY-MM-DD` or `DD-MM-YYYY`); on the website you use a date picker.
-- Bookings must be for **today or later** — the past cannot be booked.
-- One day, one holder: a day already confirmed for someone else cannot be double-booked, and approving a pending booking for a taken day fails safely.
-- A booking **reserves priority**, it does not occupy the item by itself. On the day, the person occupies it as usual — and while a confirmed booking is live for today, **nobody else can occupy that item** (the admin panel can still override).
-- An occupied item can still be booked for a future day.
-- Everyone sees and cancels their own bookings under `/mine` in the bot or on the staff site. Admin decides pending bookings and can cancel confirmed ones on the **Requests** page, which also lists everything booked ahead. The sidebar badge counts pending bookings too.
+The booker is told the outcome on Telegram either way. Other rules: bookings must be for **today or later**; one day, one holder — a day confirmed for someone else cannot be double-booked, and approving a booking for a taken day fails safely; a booking **reserves priority**, it does not occupy the item by itself — on the day, the person occupies it as usual, and while a confirmed booking is live for today nobody else can take the item (the admin panel can override). Everyone cancels their own bookings from /mine or the staff site; admins decide pending bookings and can cancel confirmed ones on the Requests page, which also lists everything booked ahead. The sidebar badge counts pending bookings too.
 
 ## Staff website (`/staff`)
 

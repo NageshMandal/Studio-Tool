@@ -1,17 +1,26 @@
 const Booking = require('../models/Booking');
-const { todayKey, formatDay, escapeHtml } = require('../utils/format');
-const { notifyAdmins } = require('../bot/notify');
+const User = require('../models/User');
+const { todayKey, formatDay, escapeHtml, formatWhen } = require('../utils/format');
+const { notifyUser, notifyAdmins } = require('../bot/notify');
 
 /**
  * One place that files a booking, used by the Telegram bot and the staff
- * website so the rules never drift apart:
+ * website so the rules never drift apart.
  *
- *  - the day must be today or later (no booking the past);
- *  - one live booking per person per item per day;
- *  - a day already confirmed for someone else cannot be double-booked;
- *  - power users are confirmed instantly, normal users wait for the admin.
+ * EVERY booking — power and normal accounts alike — waits for an admin to
+ * confirm or cancel it. What happens right after filing depends on where
+ * the instrument is:
  *
- * Throws with a `code` so callers can phrase the message for their medium.
+ *  - Item on the shelf → the admins are notified immediately (Telegram card
+ *    with ✅/❌ buttons, plus the panel's Requests page).
+ *  - Item out with someone else → THAT PERSON is notified first: "X has
+ *    booked this — submit it when your work is done." The admins are only
+ *    notified once the item actually comes back (see occupancy service),
+ *    so they confirm a booking for an instrument that is really there.
+ *
+ * Other rules: the day must be today or later; one live booking per person
+ * per item per day; a day already confirmed for someone else cannot be
+ * double-booked.
  */
 async function createBooking({ product, user, dateKey, reason, source = 'telegram' }) {
   if (!dateKey || dateKey < todayKey()) {
@@ -50,7 +59,9 @@ async function createBooking({ product, user, dateKey, reason, source = 'telegra
     throw err;
   }
 
-  const isPower = user.accountType === 'power';
+  // Is the instrument out with someone else right now?
+  const heldByOther = !!(product.assignedTo && String(product.assignedTo) !== String(user._id));
+
   const booking = await Booking.create({
     product: product._id,
     productName: product.name,
@@ -60,30 +71,77 @@ async function createBooking({ product, user, dateKey, reason, source = 'telegra
     userName: user.name,
     bookedFor: dateKey,
     reason: (reason || '').trim().slice(0, 120) || null,
-    status: isPower ? 'confirmed' : 'pending',
+    status: 'pending',
+    awaitingReturn: heldByOther,
     source,
   });
 
-  // Every signed-in admin hears about a pending booking, with decision buttons
-  if (!isPower) {
-    notifyAdmins(
-      `📅 <b>${escapeHtml(booking.userName)}</b> wants to book ` +
-        `<b>${escapeHtml(booking.productName)}</b> <code>${escapeHtml(booking.assetTag || '')}</code> ` +
-        `for <b>${escapeHtml(formatDay(dateKey))}</b>.\n` +
-        (booking.reason ? `📝 ${escapeHtml(booking.reason)}\n` : '') +
-        `Tap to decide, or use the panel → Requests.`,
-      {
-        inline_keyboard: [
-          [
-            { text: '✅ Approve', callback_data: `apbk:${booking._id}` },
-            { text: '❌ Decline', callback_data: `rjbk:${booking._id}` },
-          ],
-        ],
-      }
-    );
+  let holder = null;
+  if (heldByOther) {
+    // Ask the current holder to bring it back — the admins wait their turn
+    holder = await User.findById(product.assignedTo).lean();
+    if (holder && holder.telegramChatId) {
+      notifyUser(
+        holder.telegramChatId,
+        `📦 <b>${escapeHtml(user.name)}</b> has booked <b>${escapeHtml(product.name)}</b> ` +
+          `<code>${escapeHtml(product.assetTag)}</code> for <b>${escapeHtml(formatDay(dateKey))}</b>.\n` +
+          (booking.reason ? `📝 ${escapeHtml(booking.reason)}\n` : '') +
+          `You have had it since ${formatWhen(product.occupiedAt)}.\n\n` +
+          `Please <b>submit it when your work is done</b> — the admin will confirm the booking once it is back.`,
+        {
+          inline_keyboard: [[{ text: '✅ Submit item now', callback_data: `ret:${product._id}` }]],
+        }
+      );
+    }
+  } else {
+    // Item is on the shelf: admins can decide straight away
+    notifyAdminsAboutBooking(booking);
   }
 
-  return booking;
+  const out = booking.toObject();
+  out.holderNameAtCreation = holder ? holder.name : null;
+  return out;
 }
 
-module.exports = { createBooking };
+// The Telegram card every admin gets, with one-tap decision buttons
+function notifyAdminsAboutBooking(booking, itemJustReturned = false) {
+  notifyAdmins(
+    `📅 <b>${escapeHtml(booking.userName)}</b> wants to book ` +
+      `<b>${escapeHtml(booking.productName)}</b> <code>${escapeHtml(booking.assetTag || '')}</code> ` +
+      `for <b>${escapeHtml(formatDay(booking.bookedFor))}</b>.\n` +
+      (booking.reason ? `📝 ${escapeHtml(booking.reason)}\n` : '') +
+      (itemJustReturned ? `📦 The instrument has just been submitted and is back on the shelf.\n` : '') +
+      `Tap to decide, or use the panel → Requests.`,
+    {
+      inline_keyboard: [
+        [
+          { text: '✅ Confirm', callback_data: `apbk:${booking._id}` },
+          { text: '❌ Cancel booking', callback_data: `rjbk:${booking._id}` },
+        ],
+      ],
+    }
+  );
+}
+
+/**
+ * Called by the occupancy service whenever an instrument comes back: any
+ * bookings that were waiting for this return now go to the admins for a
+ * decision — Telegram cards and the panel both.
+ */
+async function activateHeldBookings(product) {
+  const held = await Booking.find({
+    product: product._id,
+    status: 'pending',
+    awaitingReturn: true,
+  }).sort({ bookedFor: 1 });
+
+  for (const booking of held) {
+    booking.awaitingReturn = false;
+    await booking.save();
+    notifyAdminsAboutBooking(booking, true);
+  }
+
+  return held.length;
+}
+
+module.exports = { createBooking, activateHeldBookings, notifyAdminsAboutBooking };
