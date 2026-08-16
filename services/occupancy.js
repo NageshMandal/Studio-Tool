@@ -58,8 +58,10 @@ async function occupyProduct({ product, user, reason, source = 'telegram' }) {
   });
 }
 
-// Someone brings it back.
-async function releaseProduct({ product, source = 'telegram', note }) {
+// Someone brings it back. When a next-in-line claim is waiting, the item is
+// handed straight to the claimant instead of going back on the shelf
+// (pass claims: false to skip that, e.g. when the admin form swaps holders).
+async function releaseProduct({ product, source = 'telegram', note, claims = true }) {
   const returnedAt = new Date();
 
   const openLog = await UsageLog.findOne({
@@ -85,7 +87,81 @@ async function releaseProduct({ product, source = 'telegram', note }) {
   product.status = product.condition === 'needs-repair' ? 'maintenance' : 'available';
   await product.save();
 
+  if (claims) await fulfillNextClaim(product);
+
   return openLog;
+}
+
+/**
+ * After a return: if someone is next in line, hand the item straight to them
+ * and tell them on Telegram. Failures never break the return itself — the
+ * claimant is told what happened instead.
+ */
+async function fulfillNextClaim(product) {
+  const NextClaim = require('../models/NextClaim');
+  const User = require('../models/User');
+  const { notifyUser } = require('../bot/notify');
+  const { escapeHtml } = require('../utils/format');
+
+  const claim = await NextClaim.findOne({ product: product._id, status: 'waiting' }).sort({
+    createdAt: 1,
+  });
+  if (!claim) return null;
+
+  const claimant = await User.findById(claim.user);
+  if (!claimant || claimant.status !== 'active') {
+    claim.status = 'expired';
+    claim.decidedAt = new Date();
+    claim.decisionNote = 'Claimant is no longer active';
+    await claim.save();
+    return null;
+  }
+
+  // The item may have gone to maintenance on return
+  if (product.status !== 'available') {
+    claim.status = 'expired';
+    claim.decidedAt = new Date();
+    claim.decisionNote = 'Item went to maintenance on return';
+    await claim.save();
+    if (claimant.telegramChatId) {
+      notifyUser(
+        claimant.telegramChatId,
+        `⚠️ <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> was returned, but it went into <b>maintenance</b> — it could not be handed to you.`
+      );
+    }
+    return null;
+  }
+
+  try {
+    await occupyProduct({ product, user: claimant, reason: claim.reason, source: 'auto' });
+  } catch (err) {
+    claim.status = 'expired';
+    claim.decidedAt = new Date();
+    claim.decisionNote = err.message;
+    await claim.save();
+    if (claimant.telegramChatId) {
+      notifyUser(
+        claimant.telegramChatId,
+        `⚠️ <b>${escapeHtml(product.name)}</b> was returned but could not be handed to you: ${escapeHtml(err.message)}.`
+      );
+    }
+    return null;
+  }
+
+  claim.status = 'fulfilled';
+  claim.decidedAt = new Date();
+  await claim.save();
+
+  if (claimant.telegramChatId) {
+    notifyUser(
+      claimant.telegramChatId,
+      `⚡ <b>It is yours now!</b> <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> was released and handed straight to you.\n` +
+        (claim.reason ? `📝 For: ${escapeHtml(claim.reason)}\n` : '') +
+        `\nTap <b>Submit item</b> in /mine when you bring it back.`
+    );
+  }
+
+  return claim;
 }
 
 // Used by the admin edit form, where the holder can be swapped in one save.
@@ -94,7 +170,7 @@ async function syncAssignment({ product, previousAssignee, nextAssigneeId, users
   const after = nextAssigneeId ? String(nextAssigneeId) : '';
   if (before === after) return null;
 
-  if (before) await releaseProduct({ product, source });
+  if (before) await releaseProduct({ product, source, claims: false });
   if (after) {
     const holder = users.find((u) => String(u._id) === after);
     if (holder) await occupyProduct({ product, user: holder, reason, source });
@@ -102,4 +178,4 @@ async function syncAssignment({ product, previousAssignee, nextAssigneeId, users
   return true;
 }
 
-module.exports = { occupyProduct, releaseProduct, syncAssignment };
+module.exports = { occupyProduct, releaseProduct, syncAssignment, fulfillNextClaim };

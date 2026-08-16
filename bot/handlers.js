@@ -6,6 +6,8 @@ const Booking = require('../models/Booking');
 const { occupyProduct, releaseProduct } = require('../services/occupancy');
 const { createBooking } = require('../services/booking');
 const approvals = require('../services/approvals');
+const NextClaim = require('../models/NextClaim');
+const { createClaim, releaseForClaim, keepDespiteClaim } = require('../services/claims');
 const { notifyUser, notifyAdmins } = require('./notify');
 const { setSession, getSession, clearSession } = require('./sessions');
 const views = require('./views');
@@ -168,11 +170,51 @@ async function finishBooking(bot, chatId, user, productId, dateKey, reason, ack,
 }
 
 
+const waitingClaimsOf = (userId) =>
+  NextClaim.find({ user: userId, status: 'waiting' }).sort({ createdAt: -1 }).lean();
+
 // One place that assembles the item screen, pending state included
 async function itemDetailView(item, user) {
   const holders = await holderNames([item]);
   const pending = await pendingRequestFor(user._id, item._id);
-  return views.itemDetail(item, holders[String(item.assignedTo)], user, pending);
+  const claim = await NextClaim.findOne({ product: item._id, status: 'waiting' }).lean();
+  return views.itemDetail(item, holders[String(item.assignedTo)], user, pending, claim);
+}
+
+/**
+ * Last step of a next-in-line claim: reason is in hand, so file it and tell
+ * the holder. Power users only — the service enforces that too.
+ */
+async function finishClaim(bot, chatId, user, productId, reason, ack, query) {
+  const product = await Product.findById(productId).lean();
+  clearSession(chatId);
+
+  if (!product) {
+    if (ack) await ack('That instrument is gone');
+    return send(bot, chatId, views.mainMenu(user));
+  }
+
+  try {
+    const claim = await createClaim({ product, user, reason, source: 'telegram' });
+    if (ack) await ack('You are next in line');
+    await send(bot, chatId, {
+      text:
+        `⚡ You are <b>next in line</b> for <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code>.\n` +
+        (claim.reason ? `📝 For: ${escapeHtml(claim.reason)}\n` : '') +
+        `\n${escapeHtml(claim.holderName || 'The holder')} has been asked to release it. ` +
+        `Even if they keep it for now, it comes straight to you the moment they return it.`,
+      photo: product.imageUrl || null,
+    });
+  } catch (err) {
+    const note = ['NOT_POWER', 'NOT_OCCUPIED', 'ALREADY_YOURS', 'ALREADY_CLAIMED', 'QUEUE_TAKEN'].includes(err.code)
+      ? err.message
+      : 'Could not claim that one';
+    if (ack) await ack(note.slice(0, 190));
+    else await bot.sendMessage(chatId, note);
+  }
+
+  const view = await itemDetailView(product, user);
+  return query ? replace(bot, query, view) : send(bot, chatId, view);
 }
 
 // Every signed-in admin hears about a new request, with decision buttons
@@ -378,7 +420,8 @@ async function handleMessage(bot, msg) {
       const mine = await loadProducts({ assignedTo: user._id });
       const pending = await pendingRequestsOf(user._id);
       const bookings = await upcomingBookingsOf(user._id);
-      return send(bot, chatId, views.myItems(mine, pending, bookings));
+      const claims = await waitingClaimsOf(user._id);
+      return send(bot, chatId, views.myItems(mine, pending, bookings, claims));
     }
 
     return send(bot, chatId, views.mainMenu(user));
@@ -426,6 +469,22 @@ async function handleMessage(bot, msg) {
       return bot.sendMessage(chatId, 'Please give a slightly longer reason, or tap one of the buttons.');
     }
     return finishBooking(bot, chatId, user, session.productId, session.dateKey, reason, null, null);
+  }
+
+  // Someone typing the reason for a next-in-line claim
+  if (session && session.stage === 'awaitClaimReason') {
+    const user = await signedInUser(chatId);
+    if (!user) {
+      clearSession(chatId);
+      setSession(chatId, { stage: 'awaitEmail' });
+      return askForEmail(bot, chatId);
+    }
+
+    const reason = text.slice(0, 120);
+    if (reason.length < 2) {
+      return bot.sendMessage(chatId, 'Please give a slightly longer reason, or tap one of the buttons.');
+    }
+    return finishClaim(bot, chatId, user, session.productId, reason, null, null);
   }
 
   // Someone typing the reason they need an item for
@@ -653,7 +712,8 @@ async function handleCallback(bot, query) {
     const mine = await loadProducts({ assignedTo: user._id });
     const pending = await pendingRequestsOf(user._id);
     const bookings = await upcomingBookingsOf(user._id);
-    return replace(bot, query, views.myItems(mine, pending, bookings));
+    const claims = await waitingClaimsOf(user._id);
+    return replace(bot, query, views.myItems(mine, pending, bookings, claims));
   }
 
   if (data === 'busy') {
@@ -676,6 +736,98 @@ async function handleCallback(bot, query) {
     const item = await Product.findById(data.slice(5)).lean();
     if (!item) return replace(bot, query, views.mainMenu(user));
     return replace(bot, query, await itemDetailView(item, user));
+  }
+
+  // ⚡ "Book next in line" on an occupied item (power users)
+  if (data.startsWith('nxt:')) {
+    const product = await Product.findById(data.slice(4)).lean();
+    if (!product) {
+      await ack('That instrument is gone');
+      return replace(bot, query, views.mainMenu(user));
+    }
+    if (!product.assignedTo) {
+      await ack('It is free — just occupy it');
+      return replace(bot, query, await itemDetailView(product, user));
+    }
+    if (user.accountType !== 'power') {
+      await ack('Only power accounts can claim the next turn');
+      return replace(bot, query, await itemDetailView(product, user));
+    }
+    const existing = await NextClaim.findOne({ product: product._id, status: 'waiting' }).lean();
+    if (existing) {
+      await ack(String(existing.user) === String(user._id) ? 'You are already next in line' : `${existing.userName} is already next in line`);
+      return replace(bot, query, await itemDetailView(product, user));
+    }
+
+    await ack();
+    const holders = await holderNames([product]);
+    setSession(chatId, { stage: 'awaitClaimReason', productId: String(product._id) });
+    return send(bot, chatId, views.claimReasonPrompt(product, holders[String(product.assignedTo)]));
+  }
+
+  // A tapped quick reason for a claim
+  if (data.startsWith('nrsn:')) {
+    const [, productId, index] = data.split(':');
+    const reason = views.QUICK_REASONS[Number(index)];
+    return finishClaim(bot, chatId, user, productId, reason, ack, query);
+  }
+
+  // "Type my own" for a claim
+  if (data.startsWith('nrsnown:')) {
+    await ack();
+    setSession(chatId, { stage: 'awaitClaimReason', productId: data.slice(8) });
+    return bot.sendMessage(chatId, 'Send the reason in a few words (up to 120 characters).');
+  }
+
+  // Claimant cancelling their own claim
+  if (data.startsWith('nxtcxl:')) {
+    const claim = await NextClaim.findOne({
+      _id: data.slice(7),
+      user: user._id,
+      status: 'waiting',
+    });
+    if (!claim) {
+      await ack('That claim has already been dealt with');
+    } else {
+      claim.status = 'cancelled';
+      claim.decidedAt = new Date();
+      await claim.save();
+      await ack('Claim cancelled');
+      // The holder no longer needs to decide anything
+      const holder = claim.holder ? await User.findById(claim.holder).lean() : null;
+      if (holder && holder.telegramChatId) {
+        notifyUser(
+          holder.telegramChatId,
+          `✖️ ${escapeHtml(claim.userName)} no longer needs <b>${escapeHtml(claim.productName)}</b> — you can ignore the earlier request.`
+        );
+      }
+    }
+    const item = claim ? await Product.findById(claim.product).lean() : null;
+    if (item) return replace(bot, query, await itemDetailView(item, user));
+    const mine = await loadProducts({ assignedTo: user._id });
+    return replace(bot, query, views.myItems(mine, await pendingRequestsOf(user._id), await upcomingBookingsOf(user._id), await waitingClaimsOf(user._id)));
+  }
+
+  // Holder tapping ✅ Release now on a claim notification
+  if (data.startsWith('hrel:')) {
+    const result = await releaseForClaim(data.slice(5), user);
+    await ack(result.message.slice(0, 190));
+    const frozen = `${escapeHtml(query.message.text)}\n\n<b>${escapeHtml(result.ok ? `✅ ${result.message}` : `⚠️ ${result.message}`)}</b>`;
+    await bot
+      .editMessageText(frozen, { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'HTML' })
+      .catch(() => {});
+    return null;
+  }
+
+  // Holder tapping 🙅 Keep it for now
+  if (data.startsWith('hkeep:')) {
+    const result = await keepDespiteClaim(data.slice(6), user);
+    await ack(result.message.slice(0, 190));
+    const frozen = `${escapeHtml(query.message.text)}\n\n<b>${escapeHtml(result.ok ? `🙅 ${result.message}` : `⚠️ ${result.message}`)}</b>`;
+    await bot
+      .editMessageText(frozen, { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'HTML' })
+      .catch(() => {});
+    return null;
   }
 
   // Tapping "Occupy now" / "Request this item" asks what it is for first
@@ -771,7 +923,8 @@ async function handleCallback(bot, query) {
     const mine = await loadProducts({ assignedTo: user._id });
     const pending = await pendingRequestsOf(user._id);
     const bookings = await upcomingBookingsOf(user._id);
-    return replace(bot, query, views.myItems(mine, pending, bookings));
+    const claims = await waitingClaimsOf(user._id);
+    return replace(bot, query, views.myItems(mine, pending, bookings, claims));
   }
 
   // A normal user cancelling their own pending request

@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Product = require('../models/Product');
 const AssignmentRequest = require('../models/AssignmentRequest');
+const NextClaim = require('../models/NextClaim');
 const { releaseProduct } = require('../services/occupancy');
 
 const DEPARTMENTS = ['Studio', 'Editing', 'Design', 'Production', 'Admin', 'Other'];
@@ -184,10 +185,14 @@ exports.remove = async (req, res, next) => {
     for (const product of held) {
       await releaseProduct({ product, source: 'admin', note: 'Holder removed from the register' });
     }
-    // Their open requests no longer mean anything
+    // Their open requests and claims no longer mean anything
     await AssignmentRequest.updateMany(
       { user: req.params.id, status: 'pending' },
       { status: 'cancelled', decidedAt: new Date(), decisionNote: 'Person removed from the register' }
+    );
+    await NextClaim.updateMany(
+      { user: req.params.id, status: 'waiting' },
+      { status: 'cancelled', decidedAt: new Date(), decisionNote: 'Claimant removed from the register' }
     );
     await User.findByIdAndDelete(req.params.id);
     res.redirect('/admin/users?message=Person removed');

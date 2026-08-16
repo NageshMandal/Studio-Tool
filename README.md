@@ -119,6 +119,17 @@ Admins can create more admins on the new **Admins** page (`/admin/admins`):
 - The **root admin** from `.env` is listed as a fixed row for reference but is managed only through `.env` — it can never be edited or removed from the panel.
 - Every decision records **which admin made it** (shown under Recent decisions on the Requests page).
 
+## Next in line: claiming an occupied instrument
+
+A power user no longer has to sit and wait for an occupied item. On any instrument that is out with someone else, a power account sees **⚡ Book next in line** (in the bot) or **⚡ Book next** (on the staff site). After giving a reason:
+
+- **The current holder is told immediately** — a Telegram message with **✅ Release now / 🙅 Keep it for now** buttons, and the same choice on their staff page, where the held item shows "*X is waiting for this*" with **Release** and **Keep** buttons. The holder decides.
+- **Release now** → the item is returned and handed **straight to the claimant** in one step. The claimant gets a Telegram message that it is theirs; both movements are in the usage log (`source: auto` for the hand-over).
+- **Keep it** → the claimant is told the holder still needs it. But the claim is not wasted: it stays attached to the item, and…
+- **…whenever the holder returns the item normally** — bot, website, either way — it does **not** go back on the shelf: it is handed to the claimant automatically, with a notification. First tap on a busy camera means it is yours the moment it is free.
+
+Rules: power accounts only; one waiting claimant per instrument (first come); the claimant can cancel any time (the holder is told to ignore the earlier ask); a claim expires safely if the item goes to maintenance on return, if today is booked for someone else, or if the claimant is deactivated — with a message explaining why. The admin panel's Requests page shows a read-only **Next in line** panel of every live claim. Swapping holders from the admin product form ignores claims on purpose — the admin's explicit choice wins.
+
 ## Advance bookings (book an item for a date)
 
 Anyone can reserve an instrument for a future day — from the Telegram bot (**📅 Book for a date** on any item) or from the staff website. The same account-type rule applies:

@@ -3,8 +3,10 @@ const User = require('../models/User');
 const Product = require('../models/Product');
 const AssignmentRequest = require('../models/AssignmentRequest');
 const Booking = require('../models/Booking');
+const NextClaim = require('../models/NextClaim');
 const { occupyProduct, releaseProduct } = require('../services/occupancy');
 const { createBooking } = require('../services/booking');
+const { createClaim, releaseForClaim, keepDespiteClaim } = require('../services/claims');
 const { notifyAdmins } = require('../bot/notify');
 const { escapeHtml, todayKey, formatDay } = require('../utils/format');
 const { STAFF_COOKIE } = require('../middleware/staffAuth');
@@ -97,6 +99,14 @@ exports.portal = async (req, res, next) => {
       {}
     );
 
+    // Next-in-line claims: who is waiting on what
+    const waitingClaims = await NextClaim.find({ status: 'waiting' }).lean();
+    const claimByProduct = waitingClaims.reduce(
+      (acc, c) => ({ ...acc, [String(c.product)]: c }),
+      {}
+    );
+    const myClaims = waitingClaims.filter((c) => String(c.user) === String(user._id));
+
     // Today's confirmed bookings, so a reserved item says so
     const bookedToday = await Booking.find({ status: 'confirmed', bookedFor: todayKey() }).lean();
     const bookedTodayByProduct = bookedToday.reduce(
@@ -126,6 +136,8 @@ exports.portal = async (req, res, next) => {
       myRequests,
       myBookings,
       pendingByProduct,
+      claimByProduct,
+      myClaims,
       bookedTodayByProduct,
       todayKey: todayKey(),
       message: req.query.message || null,
@@ -274,6 +286,68 @@ exports.cancelBooking = async (req, res, next) => {
     booking.decidedAt = new Date();
     await booking.save();
     back(res, 'Booking cancelled');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /staff/claim/:id — power user claims the next turn on an occupied item
+exports.claim = async (req, res, next) => {
+  try {
+    const user = req.staff;
+    const reason = (req.body.reason || '').trim().slice(0, 120);
+    if (reason.length < 2) return back(res, 'Please give a short reason first');
+
+    const product = await Product.findById(req.params.id).lean();
+    if (!product) return back(res, 'That instrument no longer exists');
+
+    try {
+      const claim = await createClaim({ product, user, reason, source: 'web' });
+      return back(
+        res,
+        `You are next in line for ${product.name} — ${claim.holderName || 'the holder'} has been asked to release it`
+      );
+    } catch (err) {
+      return back(res, err.message);
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /staff/claims/:id/cancel — claimant withdrawing
+exports.cancelClaim = async (req, res, next) => {
+  try {
+    const claim = await NextClaim.findOne({
+      _id: req.params.id,
+      user: req.staff._id,
+      status: 'waiting',
+    });
+    if (!claim) return back(res, 'That claim has already been dealt with');
+    claim.status = 'cancelled';
+    claim.decidedAt = new Date();
+    await claim.save();
+    back(res, 'Claim cancelled');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /staff/claims/:id/release — the holder releases; the item hands over
+exports.releaseClaim = async (req, res, next) => {
+  try {
+    const result = await releaseForClaim(req.params.id, req.staff);
+    back(res, result.message);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /staff/claims/:id/keep — the holder keeps it; the claimant is told
+exports.keepClaim = async (req, res, next) => {
+  try {
+    const result = await keepDespiteClaim(req.params.id, req.staff);
+    back(res, result.message);
   } catch (err) {
     next(err);
   }

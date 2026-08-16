@@ -210,3 +210,40 @@
     </table>
   <% } %>
 </section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Next in line (<%= waitingClaims.length %>)</h2>
+  </div>
+
+  <% if (waitingClaims.length === 0) { %>
+    <div class="empty"><p>Nobody is queueing for an occupied instrument right now.</p></div>
+  <% } else { %>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Instrument</th>
+          <th>Wanted by</th>
+          <th>Currently with</th>
+          <th>Reason</th>
+          <th>Since</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% waitingClaims.forEach(function (c) { %>
+          <tr>
+            <td>
+              <span class="row-title"><%= c.productName %></span>
+              <span class="row-sub"><span class="asset-tag"><%= c.assetTag || '—' %></span></span>
+            </td>
+            <td><%= c.userName %></td>
+            <td><%= c.holderName || '—' %></td>
+            <td><%= c.reason || '—' %></td>
+            <td><%= formatWhen(c.createdAt) %><span class="row-sub"><%= formatSince(c.createdAt) %> ago</span></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+    <p class="hint">The holder decides: they can release now (the item hands over instantly) or keep it — in which case it still goes to the claimant automatically when they return it.</p>
+  <% } %>
+</section>

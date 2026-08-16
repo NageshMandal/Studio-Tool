@@ -1,5 +1,6 @@
 const AssignmentRequest = require('../models/AssignmentRequest');
 const Booking = require('../models/Booking');
+const NextClaim = require('../models/NextClaim');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const approvals = require('../services/approvals');
@@ -56,6 +57,11 @@ exports.list = async (req, res, next) => {
       b.dayPassed = b.bookedFor < todayKey();
     });
 
+    // Who is queueing behind whom right now (informational — holders decide)
+    const waitingClaims = await NextClaim.find({ status: 'waiting' })
+      .sort({ createdAt: 1 })
+      .lean();
+
     res.render('requests/index', {
       title: 'Requests',
       active: 'requests',
@@ -63,6 +69,7 @@ exports.list = async (req, res, next) => {
       decided,
       pendingBookings,
       upcomingBookings,
+      waitingClaims,
       message: req.query.message || null,
     });
   } catch (err) {

@@ -111,6 +111,25 @@ function bookReasonPrompt(item, dateKey) {
   };
 }
 
+
+// Reason picker for a next-in-line claim on an occupied item
+function claimReasonPrompt(item, holderName) {
+  const rows = QUICK_REASONS.map((reason, i) => [
+    { text: reason, callback_data: `nrsn:${item._id}:${i}` },
+  ]);
+  rows.push([{ text: '✍️ Type my own reason', callback_data: `nrsnown:${item._id}` }]);
+  rows.push([{ text: '✖️ Cancel', callback_data: `item:${item._id}` }]);
+
+  return {
+    text:
+      `⚡ Claim <b>${escapeHtml(item.name)}</b> next?\n\n` +
+      `${escapeHtml(holderName || 'The current holder')} will be asked to release it — and even if they keep it, ` +
+      `it comes straight to you the moment they return it.\n\n` +
+      `What do you need it for?`,
+    keyboard: { inline_keyboard: rows },
+  };
+}
+
 function mainMenu(user) {
   return {
     text:
@@ -206,7 +225,7 @@ function itemList(category, items, holders) {
  * never show a take-out button). `pendingRequest` is the viewer's own open
  * request for this item, if any.
  */
-function itemDetail(item, holderName, viewer, pendingRequest = null) {
+function itemDetail(item, holderName, viewer, pendingRequest = null, nextClaim = null) {
   const viewerId = viewer && viewer._id ? viewer._id : viewer;
   const isPower = !!(viewer && viewer.accountType === 'power');
   const heldByViewer = item.assignedTo && String(item.assignedTo) === String(viewerId);
@@ -229,6 +248,15 @@ function itemDetail(item, holderName, viewer, pendingRequest = null) {
     if (pendingRequest.reason) details.push(`📝 ${escapeHtml(pendingRequest.reason)}`);
   }
 
+  if (nextClaim) {
+    const mineClaim = String(nextClaim.user) === String(viewerId);
+    details.push(
+      mineClaim
+        ? `\n⚡ You are next in line — it comes straight to you when ${escapeHtml(holderName || 'the holder')} releases it.`
+        : `\n⚡ Next in line: ${escapeHtml(nextClaim.userName)}`
+    );
+  }
+
   const rows = [];
 
   if (heldByViewer) {
@@ -241,6 +269,12 @@ function itemDetail(item, holderName, viewer, pendingRequest = null) {
         ? { text: '📌 Occupy now', callback_data: `occ:${item._id}` }
         : { text: '🙋 Request this item', callback_data: `occ:${item._id}` },
     ]);
+  } else if (item.assignedTo && !heldByViewer && isPower && !blockedReason(item)) {
+    if (nextClaim && String(nextClaim.user) === String(viewerId)) {
+      rows.push([{ text: '✖️ Cancel next-in-line', callback_data: `nxtcxl:${nextClaim._id}` }]);
+    } else if (!nextClaim) {
+      rows.push([{ text: '⚡ Book next in line', callback_data: `nxt:${item._id}` }]);
+    }
   }
 
   // Booking is about a future day, so an occupied item can still be booked
@@ -260,8 +294,8 @@ function itemDetail(item, holderName, viewer, pendingRequest = null) {
   };
 }
 
-function myItems(items, pendingRequests = [], bookings = []) {
-  if (items.length === 0 && pendingRequests.length === 0 && bookings.length === 0) {
+function myItems(items, pendingRequests = [], bookings = [], claims = []) {
+  if (items.length === 0 && pendingRequests.length === 0 && bookings.length === 0 && claims.length === 0) {
     return {
       text: 'You are not holding anything right now. 🎒',
       keyboard: {
@@ -297,6 +331,17 @@ function myItems(items, pendingRequests = [], bookings = []) {
     sections.push(`<b>Waiting for admin approval</b>\n\n${lines.join('\n\n')}`);
     pendingRequests.forEach((r) =>
       rows.push([{ text: `✖️ Cancel request: ${r.productName}`.slice(0, 60), callback_data: `cxl:${r._id}` }])
+    );
+  }
+
+  if (claims.length > 0) {
+    const lines = claims.map((c) => {
+      const head = `⚡ <b>${escapeHtml(c.productName)}</b> — next in line\n   <code>${escapeHtml(c.assetTag || '')}</code> · with ${escapeHtml(c.holderName || 'someone')} · asked ${formatWhen(c.createdAt)}`;
+      return c.reason ? `${head}\n   📝 ${escapeHtml(c.reason)}` : head;
+    });
+    sections.push(`<b>Waiting for a release</b>\n\n${lines.join('\n\n')}`);
+    claims.forEach((c) =>
+      rows.push([{ text: `✖️ Cancel claim: ${c.productName}`.slice(0, 60), callback_data: `nxtcxl:${c._id}` }])
     );
   }
 
@@ -414,6 +459,7 @@ function adminEmptyList(what) {
 }
 
 module.exports = {
+  claimReasonPrompt,
   adminMenu,
   adminRequestCard,
   adminBookingCard,

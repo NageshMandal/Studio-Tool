@@ -17,11 +17,25 @@
               <span class="row-title"><%= p.name %></span>
               <span class="row-sub"><span class="asset-tag"><%= p.assetTag %></span> · taken <%= formatWhen(p.occupiedAt) %> (<%= formatSince(p.occupiedAt) %> ago)</span>
               <% if (p.occupyReason) { %><span class="row-sub">📝 <%= p.occupyReason %></span><% } %>
+              <% var holdClaim = claimByProduct[String(p._id)]; %>
+              <% if (holdClaim) { %>
+                <span class="row-sub">⚡ <strong><%= holdClaim.userName %></strong> is waiting for this<% if (holdClaim.reason) { %> — 📝 <%= holdClaim.reason %><% } %></span>
+              <% } %>
             </td>
-            <td class="right">
-              <form method="POST" action="/staff/return/<%= p._id %>">
-                <button class="btn btn-primary btn-small" type="submit">Submit item</button>
-              </form>
+            <td class="right staff-actions">
+              <% var holdClaim2 = claimByProduct[String(p._id)]; %>
+              <% if (holdClaim2) { %>
+                <form method="POST" action="/staff/claims/<%= holdClaim2._id %>/release">
+                  <button class="btn btn-primary btn-small" type="submit">Release to <%= holdClaim2.userName.split(' ')[0] %></button>
+                </form>
+                <form method="POST" action="/staff/claims/<%= holdClaim2._id %>/keep">
+                  <button class="btn btn-ghost btn-small" type="submit">Keep it</button>
+                </form>
+              <% } else { %>
+                <form method="POST" action="/staff/return/<%= p._id %>">
+                  <button class="btn btn-primary btn-small" type="submit">Submit item</button>
+                </form>
+              <% } %>
             </td>
           </tr>
         <% }); %>
@@ -30,7 +44,7 @@
   </section>
 <% } %>
 
-<% if (myRequests.length > 0 || myBookings.length > 0) { %>
+<% if (myRequests.length > 0 || myBookings.length > 0 || myClaims.length > 0) { %>
   <section class="panel">
     <div class="panel-head"><h2>Waiting and booked</h2></div>
     <table class="table">
@@ -45,6 +59,20 @@
             <td class="right">
               <form method="POST" action="/staff/requests/<%= r._id %>/cancel">
                 <button class="btn btn-ghost btn-small" type="submit">Cancel request</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+        <% myClaims.forEach(function (c) { %>
+          <tr>
+            <td>
+              <span class="row-title">⚡ <%= c.productName %> — next in line</span>
+              <span class="row-sub"><span class="asset-tag"><%= c.assetTag || '—' %></span> · with <%= c.holderName || 'someone' %> · comes to you when released</span>
+              <% if (c.reason) { %><span class="row-sub">📝 <%= c.reason %></span><% } %>
+            </td>
+            <td class="right">
+              <form method="POST" action="/staff/claims/<%= c._id %>/cancel">
+                <button class="btn btn-ghost btn-small" type="submit">Cancel claim</button>
               </form>
             </td>
           </tr>
@@ -110,6 +138,10 @@
                 <% if (bookedToday) { %>
                   · <span class="pill pill-power">booked today: <%= bookedToday.userName %></span>
                 <% } %>
+                <% var rowClaim = claimByProduct[String(p._id)]; %>
+                <% if (rowClaim) { %>
+                  · ⚡ next: <%= String(rowClaim.user) === String(user._id) ? 'you' : rowClaim.userName %>
+                <% } %>
               </span>
             </td>
             <td class="right staff-actions">
@@ -121,6 +153,21 @@
                 <form method="POST" action="/staff/requests/<%= myPending._id %>/cancel">
                   <button class="btn btn-ghost btn-small" type="submit">Cancel request</button>
                 </form>
+              <% } else if (p.assignedTo && !mine && !blocked && user.accountType === 'power') { %>
+                <% var q = claimByProduct[String(p._id)]; %>
+                <% if (q && String(q.user) === String(user._id)) { %>
+                  <form method="POST" action="/staff/claims/<%= q._id %>/cancel">
+                    <button class="btn btn-ghost btn-small" type="submit">Cancel claim</button>
+                  </form>
+                <% } else if (!q) { %>
+                  <details class="staff-drop">
+                    <summary class="btn btn-primary btn-small">⚡ Book next</summary>
+                    <form class="staff-popform" method="POST" action="/staff/claim/<%= p._id %>">
+                      <input type="text" name="reason" maxlength="120" placeholder="What is it for?" required minlength="2" />
+                      <button class="btn btn-primary btn-small" type="submit">Ask holder to release</button>
+                    </form>
+                  </details>
+                <% } %>
               <% } else if (takeable) { %>
                 <details class="staff-drop">
                   <summary class="btn btn-primary btn-small"><%= user.accountType === 'power' ? 'Occupy now' : 'Request item' %></summary>
