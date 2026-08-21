@@ -9,11 +9,11 @@ const { dayRange } = require('../utils/format');
 const CATEGORIES = [
   'Camera',
   'Lens',
-  'Lighting',
+  'Memory',
   'Audio',
-  'Computer',
+  'Tripod',
   'Accessory',
-  'Furniture',
+  'Mic ID',
   'Other',
 ];
 const CONDITIONS = ['new', 'good', 'needs-repair', 'retired'];

@@ -6,7 +6,7 @@ const productSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, 'Instrument name is required'],
+      required: [true, 'Name is required'],
       trim: true,
     },
     assetTag: {
@@ -20,11 +20,11 @@ const productSchema = new mongoose.Schema(
       enum: [
         'Camera',
         'Lens',
-        'Lighting',
+        'Memory',
         'Audio',
-        'Computer',
+        'Tripod',
         'Accessory',
-        'Furniture',
+        'Mic ID',
         'Other',
       ],
       default: 'Other',
