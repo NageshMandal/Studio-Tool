@@ -32,11 +32,6 @@ const productSchema = new mongoose.Schema(
     brand: { type: String, trim: true },
     model: { type: String, trim: true },
     serialNumber: { type: String, trim: true },
-    quantity: {
-      type: Number,
-      default: 1,
-      min: [0, 'Quantity cannot be negative'],
-    },
     condition: {
       type: String,
       enum: ['new', 'good', 'needs-repair', 'retired'],

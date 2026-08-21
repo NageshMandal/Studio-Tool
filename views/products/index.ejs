@@ -38,7 +38,6 @@
           <th>Asset tag</th>
           <th>Instrument</th>
           <th>Category</th>
-          <th>Qty</th>
           <th>Condition</th>
           <th>Availability</th>
           <th>Since</th>
@@ -58,7 +57,6 @@
               <span class="row-sub"><%= [item.brand, item.model].filter(Boolean).join(' · ') %></span>
             </td>
             <td><%= item.category %></td>
-            <td><%= item.quantity %></td>
             <td><span class="pill pill-<%= item.condition %>"><%= item.condition.replace('-', ' ') %></span></td>
             <td>
               <% if (item.status === 'maintenance') { %>

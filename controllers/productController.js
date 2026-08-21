@@ -25,7 +25,6 @@ const cleanBody = (body) => ({
   brand: body.brand,
   model: body.model,
   serialNumber: body.serialNumber,
-  quantity: Number(body.quantity) || 0,
   condition: body.condition,
   status: body.status,
   location: body.location,
@@ -40,14 +39,14 @@ exports.dashboard = async (req, res, next) => {
   try {
     const { start, end } = dayRange();
 
-    const [totalItems, totalUsers, assignedItems, repairItems, units, recent, outNow, takenToday, returnedToday, linkedUsers] =
+    const [totalItems, totalUsers, assignedItems, repairItems, valueAgg, recent, outNow, takenToday, returnedToday, linkedUsers] =
       await Promise.all([
         Product.countDocuments(),
         User.countDocuments(),
         Product.countDocuments({ status: 'assigned' }),
         Product.countDocuments({ condition: 'needs-repair' }),
         Product.aggregate([
-          { $group: { _id: null, units: { $sum: '$quantity' }, value: { $sum: { $multiply: ['$price', '$quantity'] } } } },
+          { $group: { _id: null, value: { $sum: '$price' } } },
         ]),
         Product.find().sort({ createdAt: -1 }).limit(5).populate('assignedTo', 'name'),
         Product.find({ assignedTo: { $ne: null } }).sort({ occupiedAt: 1 }).limit(8).populate('assignedTo', 'name'),
@@ -64,8 +63,7 @@ exports.dashboard = async (req, res, next) => {
         totalUsers,
         assignedItems,
         repairItems,
-        totalUnits: units[0] ? units[0].units : 0,
-        totalValue: units[0] ? units[0].value : 0,
+        totalValue: valueAgg[0] ? valueAgg[0].value : 0,
         takenToday,
         returnedToday,
         linkedUsers,
