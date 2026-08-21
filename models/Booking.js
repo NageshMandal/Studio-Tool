@@ -22,8 +22,17 @@ const bookingSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     userName: { type: String, trim: true },
 
-    // The whole day being reserved, as 'YYYY-MM-DD'
+    // The whole day being reserved (the pickup day), as 'YYYY-MM-DD'
     bookedFor: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
+
+    // Planned pickup time on the booked day, as 'HH:MM' (24h). Optional so
+    // Telegram bookings, which only ask for a date, keep working.
+    pickupTime: { type: String, trim: true, match: /^\d{2}:\d{2}$/, default: null },
+
+    // Planned drop-off (return) day and time. dropDate is never before
+    // bookedFor. Optional for the same reason as pickupTime.
+    dropDate: { type: String, trim: true, match: /^\d{4}-\d{2}-\d{2}$/, default: null },
+    dropTime: { type: String, trim: true, match: /^\d{2}:\d{2}$/, default: null },
 
     reason: { type: String, trim: true, maxlength: 120, default: null },
 

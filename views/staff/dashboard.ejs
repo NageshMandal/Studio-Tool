@@ -90,7 +90,10 @@
         <% myBookings.forEach(function (b) { %>
           <tr>
             <td>
-              <span class="row-title">📅 <%= b.productName %> — <%= formatDay(b.bookedFor) %></span>
+              <span class="row-title">📅 <%= b.productName %> — <%= formatDay(b.bookedFor) %><%= b.pickupTime ? ' ' + b.pickupTime : '' %></span>
+              <% if (b.dropDate || b.dropTime) { %>
+                <span class="row-sub">↩️ drop: <%= b.dropDate ? formatDay(b.dropDate) : formatDay(b.bookedFor) %><%= b.dropTime ? ' ' + b.dropTime : '' %></span>
+              <% } %>
               <span class="row-sub">
                 <span class="asset-tag"><%= b.assetTag || '—' %></span> ·
                 <% if (b.status === 'confirmed') { %><span class="pill pill-available">confirmed</span><% } else if (b.awaitingReturn) { %><span class="pill pill-assigned">waiting for the item to be submitted</span><% } else { %><span class="pill pill-maintenance">waiting for admin</span><% } %>

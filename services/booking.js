@@ -22,12 +22,60 @@ const { notifyUser, notifyAdmins } = require('../bot/notify');
  * per item per day; a day already confirmed for someone else cannot be
  * double-booked.
  */
-async function createBooking({ product, user, dateKey, reason, source = 'telegram' }) {
+const TIME_RE = /^\d{2}:\d{2}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** 'Thu 20 Aug 10:00 → Fri 21 Aug 18:00' — omits whatever was not given. */
+function bookingSpan(b) {
+  let out = formatDay(b.bookedFor);
+  if (b.pickupTime) out += ` ${b.pickupTime}`;
+  if (b.dropDate || b.dropTime) {
+    out += ' → ';
+    out += b.dropDate && b.dropDate !== b.bookedFor ? `${formatDay(b.dropDate)} ` : '';
+    out += b.dropTime || '';
+    out = out.trimEnd();
+  }
+  return out;
+}
+
+async function createBooking({ product, user, dateKey, reason, pickupTime, dropDate, dropTime, source = 'telegram' }) {
   if (!dateKey || dateKey < todayKey()) {
     const err = new Error('Bookings must be for today or a future date');
     err.code = 'PAST_DATE';
     throw err;
   }
+
+  // Pickup / drop details are optional (the Telegram bot only asks for a
+  // date) but must be sensible when given.
+  pickupTime = (pickupTime || '').trim() || null;
+  dropDate = (dropDate || '').trim() || null;
+  dropTime = (dropTime || '').trim() || null;
+  if (pickupTime && !TIME_RE.test(pickupTime)) {
+    const err = new Error('Pickup time must look like 10:30');
+    err.code = 'BAD_TIME';
+    throw err;
+  }
+  if (dropTime && !TIME_RE.test(dropTime)) {
+    const err = new Error('Drop time must look like 18:00');
+    err.code = 'BAD_TIME';
+    throw err;
+  }
+  if (dropDate && !DATE_RE.test(dropDate)) {
+    const err = new Error('Pick a valid drop date');
+    err.code = 'BAD_DATE';
+    throw err;
+  }
+  if (dropDate && dropDate < dateKey) {
+    const err = new Error('The drop date cannot be before the pickup date');
+    err.code = 'DROP_BEFORE_PICKUP';
+    throw err;
+  }
+  if (dropDate === dateKey && pickupTime && dropTime && dropTime <= pickupTime) {
+    const err = new Error('The drop time must be after the pickup time');
+    err.code = 'DROP_BEFORE_PICKUP';
+    throw err;
+  }
+
   if (product.condition === 'retired') {
     const err = new Error('This item is retired and cannot be booked');
     err.code = 'RETIRED';
@@ -70,6 +118,9 @@ async function createBooking({ product, user, dateKey, reason, source = 'telegra
     user: user._id,
     userName: user.name,
     bookedFor: dateKey,
+    pickupTime,
+    dropDate,
+    dropTime,
     reason: (reason || '').trim().slice(0, 120) || null,
     status: 'pending',
     awaitingReturn: heldByOther,
@@ -84,7 +135,7 @@ async function createBooking({ product, user, dateKey, reason, source = 'telegra
       notifyUser(
         holder.telegramChatId,
         `📦 <b>${escapeHtml(user.name)}</b> has booked <b>${escapeHtml(product.name)}</b> ` +
-          `<code>${escapeHtml(product.assetTag)}</code> for <b>${escapeHtml(formatDay(dateKey))}</b>.\n` +
+          `<code>${escapeHtml(product.assetTag)}</code> for <b>${escapeHtml(bookingSpan(booking))}</b>.\n` +
           (booking.reason ? `📝 ${escapeHtml(booking.reason)}\n` : '') +
           `You have had it since ${formatWhen(product.occupiedAt)}.\n\n` +
           `Please <b>submit it when your work is done</b> — the admin will confirm the booking once it is back.`,
@@ -108,7 +159,7 @@ function notifyAdminsAboutBooking(booking, itemJustReturned = false) {
   notifyAdmins(
     `📅 <b>${escapeHtml(booking.userName)}</b> wants to book ` +
       `<b>${escapeHtml(booking.productName)}</b> <code>${escapeHtml(booking.assetTag || '')}</code> ` +
-      `for <b>${escapeHtml(formatDay(booking.bookedFor))}</b>.\n` +
+      `for <b>${escapeHtml(bookingSpan(booking))}</b>.\n` +
       (booking.reason ? `📝 ${escapeHtml(booking.reason)}\n` : '') +
       (itemJustReturned ? `📦 The item has just been submitted and is back on the shelf.\n` : '') +
       `Tap to decide, or use the panel → Requests.`,
@@ -144,4 +195,4 @@ async function activateHeldBookings(product) {
   return held.length;
 }
 
-module.exports = { createBooking, activateHeldBookings, notifyAdminsAboutBooking };
+module.exports = { createBooking, activateHeldBookings, notifyAdminsAboutBooking, bookingSpan };

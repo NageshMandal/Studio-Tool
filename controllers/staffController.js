@@ -316,16 +316,22 @@ exports.book = async (req, res, next) => {
   try {
     const user = req.staff;
     const dateKey = (req.body.date || '').trim();
+    const pickupTime = (req.body.pickupTime || '').trim();
+    const dropDate = (req.body.dropDate || '').trim();
+    const dropTime = (req.body.dropTime || '').trim();
     const reason = (req.body.reason || '').trim().slice(0, 120);
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return back(req, res, 'Pick a date for the booking');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return back(req, res, 'Pick a pickup date for the booking');
+    if (!/^\d{2}:\d{2}$/.test(pickupTime)) return back(req, res, 'Pick a pickup time for the booking');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dropDate)) return back(req, res, 'Pick a drop date for the booking');
+    if (!/^\d{2}:\d{2}$/.test(dropTime)) return back(req, res, 'Pick a drop time for the booking');
     if (reason.length < 2) return back(req, res, 'Please give a short reason for the booking');
 
     const product = await Product.findById(req.params.id).lean();
     if (!product) return back(req, res, 'That item no longer exists');
 
     try {
-      const booking = await createBooking({ product, user, dateKey, reason, source: 'web' });
+      const booking = await createBooking({ product, user, dateKey, reason, pickupTime, dropDate, dropTime, source: 'web' });
       return back(
         res,
         booking.awaitingReturn

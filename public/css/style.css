@@ -521,3 +521,9 @@ body.centered {
   min-width: 220px;
 }
 .staff-popform input { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+
+/* ---------- booking pop-form with pickup/drop rows ---------- */
+.staff-popform-book { min-width: 250px; }
+.popform-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #5a6172; }
+.popform-row { display: flex; gap: 6px; }
+.popform-row input { flex: 1; min-width: 0; }

@@ -5,6 +5,7 @@ const User = require('../models/User');
 const { occupyProduct } = require('./occupancy');
 const { notifyUser } = require('../bot/notify');
 const { escapeHtml, todayKey, formatDay } = require('../utils/format');
+const { bookingSpan } = require('./booking');
 
 /**
  * The one place a request or booking gets decided, used by the admin panel
@@ -172,7 +173,7 @@ async function approveBooking(bookingId, decidedBy) {
         ? `✅ <b>Booking confirmed!</b> <b>${escapeHtml(booking.productName)}</b> <code>${escapeHtml(booking.assetTag || '')}</code> is for <b>today</b> — it has been <b>assigned to you</b> automatically.\n` +
             (booking.reason ? `📝 For: ${escapeHtml(booking.reason)}\n` : '') +
             `\nTap <b>Submit item</b> in /mine when you bring it back.`
-        : `✅ <b>Booking confirmed!</b> <b>${escapeHtml(booking.productName)}</b> <code>${escapeHtml(booking.assetTag || '')}</code> is reserved for you on <b>${escapeHtml(formatDay(booking.bookedFor))}</b>.\n` +
+        : `✅ <b>Booking confirmed!</b> <b>${escapeHtml(booking.productName)}</b> <code>${escapeHtml(booking.assetTag || '')}</code> is reserved for you: <b>${escapeHtml(bookingSpan(booking))}</b>.\n` +
             (booking.reason ? `📝 For: ${escapeHtml(booking.reason)}\n` : '') +
             `\nIt will be assigned to you automatically on the day.`
     );

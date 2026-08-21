@@ -125,7 +125,7 @@
           <th></th>
           <th>Item</th>
           <th>Booked by</th>
-          <th>For day</th>
+          <th>Pickup / drop</th>
           <th>Reason</th>
           <th>Asked</th>
           <th class="right">Decision</th>
@@ -150,7 +150,13 @@
               <% } %>
             </td>
             <td><%= b.userName %></td>
-            <td><strong><%= formatDay(b.bookedFor) %></strong><span class="row-sub"><%= b.bookedFor %></span></td>
+            <td>
+              <strong><%= formatDay(b.bookedFor) %></strong><%= b.pickupTime ? ' · ' + b.pickupTime : '' %>
+              <span class="row-sub"><%= b.bookedFor %></span>
+              <% if (b.dropDate || b.dropTime) { %>
+                <span class="row-sub">↩️ drop: <%= b.dropDate ? formatDay(b.dropDate) : formatDay(b.bookedFor) %><%= b.dropTime ? ' ' + b.dropTime : '' %></span>
+              <% } %>
+            </td>
             <td><%= b.reason || '—' %></td>
             <td><%= formatWhen(b.createdAt) %></td>
             <td class="right">
@@ -186,7 +192,7 @@
         <tr>
           <th>Item</th>
           <th>Booked by</th>
-          <th>For day</th>
+          <th>Pickup / drop</th>
           <th>Reason</th>
           <th class="right"></th>
         </tr>
@@ -199,7 +205,13 @@
               <span class="row-sub"><span class="asset-tag"><%= b.assetTag || '—' %></span></span>
             </td>
             <td><%= b.userName %></td>
-            <td><strong><%= formatDay(b.bookedFor) %></strong><span class="row-sub"><%= b.bookedFor %></span></td>
+            <td>
+              <strong><%= formatDay(b.bookedFor) %></strong><%= b.pickupTime ? ' · ' + b.pickupTime : '' %>
+              <span class="row-sub"><%= b.bookedFor %></span>
+              <% if (b.dropDate || b.dropTime) { %>
+                <span class="row-sub">↩️ drop: <%= b.dropDate ? formatDay(b.dropDate) : formatDay(b.bookedFor) %><%= b.dropTime ? ' ' + b.dropTime : '' %></span>
+              <% } %>
+            </td>
             <td><%= b.reason || '—' %></td>
             <td class="right">
               <form method="POST" action="/admin/requests/bookings/<%= b._id %>/cancel" style="display:inline"

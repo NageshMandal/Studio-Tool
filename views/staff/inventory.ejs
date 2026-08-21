@@ -110,8 +110,19 @@
               <% if (!retired) { %>
                 <details class="staff-drop">
                   <summary class="btn btn-ghost btn-small">Book a date</summary>
-                  <form class="staff-popform" method="POST" action="/staff/book/<%= p._id %>">
-                    <input type="date" name="date" min="<%= todayKey %>" required />
+                  <form class="staff-popform staff-popform-book" method="POST" action="/staff/book/<%= p._id %>">
+                    <label class="popform-label">Pickup
+                      <span class="popform-row">
+                        <input type="date" name="date" min="<%= todayKey %>" required />
+                        <input type="time" name="pickupTime" required />
+                      </span>
+                    </label>
+                    <label class="popform-label">Drop
+                      <span class="popform-row">
+                        <input type="date" name="dropDate" min="<%= todayKey %>" required />
+                        <input type="time" name="dropTime" required />
+                      </span>
+                    </label>
                     <input type="text" name="reason" maxlength="120" placeholder="What is it for?" required minlength="2" />
                     <button class="btn btn-primary btn-small" type="submit">Send booking</button>
                   </form>
