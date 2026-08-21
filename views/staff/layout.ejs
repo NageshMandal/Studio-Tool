@@ -9,28 +9,38 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
-<body class="staff-body">
-  <header class="staff-topbar">
-    <a class="brand" href="/staff">
-      <span class="brand-mark">SI</span>
-      <span class="brand-text">Studio <strong>Inventory</strong></span>
-    </a>
-    <div class="staff-topbar-right">
-      <span class="staff-me">
-        <%= staff.name %>
-        <% if (staff.accountType === 'power') { %>
-          <span class="pill pill-power">power</span>
-        <% } else { %>
-          <span class="pill pill-normal">normal</span>
-        <% } %>
-      </span>
-      <form method="POST" action="/staff/logout">
-        <button class="btn btn-ghost btn-small" type="submit">Sign out</button>
-      </form>
-    </div>
-  </header>
-  <main class="staff-main">
-    <%- body %>
-  </main>
+<body>
+  <div class="shell">
+    <%- include('../partials/staff-sidebar') %>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Staff portal</p>
+          <h1 class="page-title"><%= title %></h1>
+        </div>
+        <div class="topbar-right">
+          <div class="whoami">
+            <span class="whoami-name">
+              <%= staff.name %>
+              <% if (staff.accountType === 'power') { %>
+                <span class="pill pill-power">power</span>
+              <% } else { %>
+                <span class="pill pill-normal">normal</span>
+              <% } %>
+            </span>
+            <span class="whoami-mail"><%= staff.email %></span>
+          </div>
+          <form method="POST" action="/staff/logout">
+            <button class="btn btn-ghost" type="submit">Sign out</button>
+          </form>
+        </div>
+      </header>
+
+      <div class="content">
+        <%- body %>
+      </div>
+    </main>
+  </div>
 </body>
 </html>

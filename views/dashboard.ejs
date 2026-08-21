@@ -1,6 +1,6 @@
 <section class="stat-grid">
   <div class="stat">
-    <span class="stat-label">Instruments logged</span>
+    <span class="stat-label">Inventory logged</span>
     <span class="stat-value"><%= stats.totalItems %></span>
     <span class="stat-note">On the register</span>
   </div>
@@ -37,7 +37,7 @@
         <tr>
           <th></th>
           <th>Asset tag</th>
-          <th>Instrument</th>
+          <th>Item</th>
           <th>Occupied by</th>
           <th>Taken for</th>
           <th>Since</th>
@@ -66,13 +66,13 @@
 <section class="panel">
   <div class="panel-head">
     <h2>Recently added</h2>
-    <a class="btn btn-primary" href="/admin/products/new">Add instrument</a>
+    <a class="btn btn-primary" href="/admin/products/new">Add item</a>
   </div>
 
   <% if (recent.length === 0) { %>
     <div class="empty">
-      <p>Nothing logged yet. Add your first instrument to start the register.</p>
-      <a class="btn btn-primary" href="/admin/products/new">Add instrument</a>
+      <p>Nothing logged yet. Add your first item to start the register.</p>
+      <a class="btn btn-primary" href="/admin/products/new">Add item</a>
     </div>
   <% } else { %>
     <table class="table">
@@ -80,7 +80,7 @@
         <tr>
           <th></th>
           <th>Asset tag</th>
-          <th>Instrument</th>
+          <th>Item</th>
           <th>Category</th>
           <th>Held by</th>
           <th>Added</th>

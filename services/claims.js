@@ -8,7 +8,7 @@ const { escapeHtml, formatWhen, formatSince } = require('../utils/format');
 /**
  * Next-in-line claims, shared by the Telegram bot and the staff website.
  *
- * A power user claims an occupied instrument. The current holder is told at
+ * A power user claims an occupied item. The current holder is told at
  * once — Telegram message with Release / Keep buttons, and the same choice on
  * their staff page. Releasing (or returning the item normally) hands it
  * straight to the claimant; keeping it tells the claimant no.
@@ -22,7 +22,7 @@ async function createClaim({ product, user, reason, source = 'telegram' }) {
     throw err;
   }
   if (!product.assignedTo) {
-    const err = new Error('This instrument is free — just occupy it');
+    const err = new Error('This item is free — just occupy it');
     err.code = 'NOT_OCCUPIED';
     throw err;
   }
@@ -83,14 +83,14 @@ async function createClaim({ product, user, reason, source = 'telegram' }) {
 
 /**
  * The holder releases: return the item, which auto-hands it to the claimant.
- * `holderUser` must actually be holding the instrument.
+ * `holderUser` must actually be holding the item.
  */
 async function releaseForClaim(claimId, holderUser) {
   const claim = await NextClaim.findOne({ _id: claimId, status: 'waiting' });
   if (!claim) return { ok: false, message: 'That request has already been dealt with' };
 
   const product = await Product.findById(claim.product);
-  if (!product) return { ok: false, message: 'That instrument no longer exists' };
+  if (!product) return { ok: false, message: 'That item no longer exists' };
   if (!product.assignedTo || String(product.assignedTo) !== String(holderUser._id)) {
     return { ok: false, message: 'That one is not with you any more' };
   }

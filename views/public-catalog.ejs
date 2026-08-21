@@ -25,7 +25,7 @@
       <div class="stat">
         <span class="stat-label">On the register</span>
         <span class="stat-value"><%= counts.total %></span>
-        <span class="stat-note">instruments</span>
+        <span class="stat-note">items</span>
       </div>
       <div class="stat">
         <span class="stat-label">Available</span>
@@ -41,6 +41,28 @@
         <span class="stat-label">In maintenance</span>
         <span class="stat-value"><%= counts.maintenance %></span>
         <span class="stat-note">not takeable</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <form class="filters" method="GET" action="/">
+          <input type="search" name="q" value="<%= query.q %>" placeholder="Search name, tag, serial…" />
+          <select name="category">
+            <option value="">All categories</option>
+            <% categories.forEach(function (c) { %>
+              <option value="<%= c %>" <%= query.category === c ? 'selected' : '' %>><%= c %></option>
+            <% }); %>
+          </select>
+          <select name="status">
+            <option value="">Any status</option>
+            <% statuses.forEach(function (s) { %>
+              <option value="<%= s %>" <%= query.status === s ? 'selected' : '' %>><%= s %></option>
+            <% }); %>
+          </select>
+          <button class="btn btn-ghost" type="submit">Filter</button>
+          <a class="btn btn-ghost" href="/">Reset</a>
+        </form>
       </div>
     </section>
 
@@ -85,7 +107,7 @@
     <% }); %>
 
     <% if (groups.length === 0) { %>
-      <section class="panel"><div class="empty"><p>Nothing is on the register yet.</p></div></section>
+      <section class="panel"><div class="empty"><p><%= (query.q || query.category || query.status) ? 'No items match this filter.' : 'Nothing is on the register yet.' %></p></div></section>
     <% } %>
 
     <p class="hint" style="text-align:center">Sign in to occupy an item or book one for a date.</p>

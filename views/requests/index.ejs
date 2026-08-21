@@ -9,14 +9,14 @@
 
   <% if (pending.length === 0) { %>
     <div class="empty">
-      <p>No pending requests. When a normal user asks for an instrument from the Telegram bot, it will show up here.</p>
+      <p>No pending requests. When a normal user asks for an item from the Telegram bot, it will show up here.</p>
     </div>
   <% } else { %>
     <table class="table">
       <thead>
         <tr>
           <th></th>
-          <th>Instrument</th>
+          <th>Item</th>
           <th>Requested by</th>
           <th>Reason</th>
           <th>Asked</th>
@@ -74,7 +74,7 @@
     <table class="table">
       <thead>
         <tr>
-          <th>Instrument</th>
+          <th>Item</th>
           <th>Requested by</th>
           <th>Reason</th>
           <th>Outcome</th>
@@ -116,14 +116,14 @@
 
   <% if (pendingBookings.length === 0) { %>
     <div class="empty">
-      <p>No pending bookings. When a normal user books an instrument for a date, it will show up here.</p>
+      <p>No pending bookings. When a normal user books an item for a date, it will show up here.</p>
     </div>
   <% } else { %>
     <table class="table">
       <thead>
         <tr>
           <th></th>
-          <th>Instrument</th>
+          <th>Item</th>
           <th>Booked by</th>
           <th>For day</th>
           <th>Reason</th>
@@ -184,7 +184,7 @@
     <table class="table">
       <thead>
         <tr>
-          <th>Instrument</th>
+          <th>Item</th>
           <th>Booked by</th>
           <th>For day</th>
           <th>Reason</th>
@@ -220,12 +220,12 @@
   </div>
 
   <% if (waitingClaims.length === 0) { %>
-    <div class="empty"><p>Nobody is queueing for an occupied instrument right now.</p></div>
+    <div class="empty"><p>Nobody is queueing for an occupied item right now.</p></div>
   <% } else { %>
     <table class="table">
       <thead>
         <tr>
-          <th>Instrument</th>
+          <th>Item</th>
           <th>Wanted by</th>
           <th>Currently with</th>
           <th>Reason</th>

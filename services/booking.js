@@ -9,14 +9,14 @@ const { notifyUser, notifyAdmins } = require('../bot/notify');
  *
  * EVERY booking — power and normal accounts alike — waits for an admin to
  * confirm or cancel it. What happens right after filing depends on where
- * the instrument is:
+ * the item is:
  *
  *  - Item on the shelf → the admins are notified immediately (Telegram card
  *    with ✅/❌ buttons, plus the panel's Requests page).
  *  - Item out with someone else → THAT PERSON is notified first: "X has
  *    booked this — submit it when your work is done." The admins are only
  *    notified once the item actually comes back (see occupancy service),
- *    so they confirm a booking for an instrument that is really there.
+ *    so they confirm a booking for an item that is really there.
  *
  * Other rules: the day must be today or later; one live booking per person
  * per item per day; a day already confirmed for someone else cannot be
@@ -29,7 +29,7 @@ async function createBooking({ product, user, dateKey, reason, source = 'telegra
     throw err;
   }
   if (product.condition === 'retired') {
-    const err = new Error('This instrument is retired and cannot be booked');
+    const err = new Error('This item is retired and cannot be booked');
     err.code = 'RETIRED';
     throw err;
   }
@@ -59,7 +59,7 @@ async function createBooking({ product, user, dateKey, reason, source = 'telegra
     throw err;
   }
 
-  // Is the instrument out with someone else right now?
+  // Is the item out with someone else right now?
   const heldByOther = !!(product.assignedTo && String(product.assignedTo) !== String(user._id));
 
   const booking = await Booking.create({
@@ -110,7 +110,7 @@ function notifyAdminsAboutBooking(booking, itemJustReturned = false) {
       `<b>${escapeHtml(booking.productName)}</b> <code>${escapeHtml(booking.assetTag || '')}</code> ` +
       `for <b>${escapeHtml(formatDay(booking.bookedFor))}</b>.\n` +
       (booking.reason ? `📝 ${escapeHtml(booking.reason)}\n` : '') +
-      (itemJustReturned ? `📦 The instrument has just been submitted and is back on the shelf.\n` : '') +
+      (itemJustReturned ? `📦 The item has just been submitted and is back on the shelf.\n` : '') +
       `Tap to decide, or use the panel → Requests.`,
     {
       inline_keyboard: [
@@ -124,7 +124,7 @@ function notifyAdminsAboutBooking(booking, itemJustReturned = false) {
 }
 
 /**
- * Called by the occupancy service whenever an instrument comes back: any
+ * Called by the occupancy service whenever an item comes back: any
  * bookings that were waiting for this return now go to the admins for a
  * decision — Telegram cards and the panel both.
  */

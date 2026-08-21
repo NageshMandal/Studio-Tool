@@ -6,7 +6,7 @@ const MAINTENANCE = '🛠';
 const RETIRED = '⛔';
 
 /**
- * Why an instrument cannot be taken out right now, ignoring who holds it.
+ * Why an item cannot be taken out right now, ignoring who holds it.
  * One place, so the list counts, the icons and the buttons never disagree.
  */
 function blockedReason(product) {
@@ -150,7 +150,7 @@ function mainMenu(user) {
 function categoryList(groups) {
   if (groups.length === 0) {
     return {
-      text: 'Nothing is on the register yet. Ask the admin to add the studio instruments.',
+      text: 'Nothing is on the register yet. Ask the admin to add the studio items.',
       keyboard: { inline_keyboard: [[{ text: '⬅️ Back', callback_data: 'menu' }]] },
     };
   }
@@ -192,7 +192,7 @@ function categoryPhotos(items, holders = {}) {
 function itemList(category, items, holders) {
   if (items.length === 0) {
     return {
-      text: `No instruments in <b>${escapeHtml(category)}</b> yet.`,
+      text: `No items in <b>${escapeHtml(category)}</b> yet.`,
       keyboard: { inline_keyboard: [[{ text: '⬅️ Categories', callback_data: 'cats' }]] },
     };
   }

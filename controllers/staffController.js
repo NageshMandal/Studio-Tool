@@ -10,6 +10,7 @@ const { createClaim, releaseForClaim, keepDespiteClaim } = require('../services/
 const { notifyAdmins } = require('../bot/notify');
 const { escapeHtml, todayKey, formatDay } = require('../utils/format');
 const { STAFF_COOKIE } = require('../middleware/staffAuth');
+const { CATEGORIES, STATUSES } = require('./productController');
 
 /**
  * The staff website: the same rules as the Telegram bot, in a browser.
@@ -19,7 +20,27 @@ const { STAFF_COOKIE } = require('../middleware/staffAuth');
  * return what they hold, and book an item for a future date.
  */
 
-const back = (res, message) => res.redirect(`/staff?message=${encodeURIComponent(message)}`);
+// Send the person back to the staff page they acted from (dashboard or
+// inventory, keeping any filters), with a flash message.
+const back = (req, res, message) => {
+  let target = '/staff';
+  try {
+    const ref = req.get('referer');
+    if (ref) {
+      const u = new URL(ref, `http://${req.get('host') || 'localhost'}`);
+      if (u.pathname.startsWith('/staff')) {
+        u.searchParams.delete('message');
+        u.searchParams.delete('error');
+        const qs = u.searchParams.toString();
+        target = u.pathname + (qs ? `?${qs}` : '');
+      }
+    }
+  } catch (err) {
+    /* fall back to /staff */
+  }
+  const sep = target.includes('?') ? '&' : '?';
+  res.redirect(`${target}${sep}message=${encodeURIComponent(message)}`);
+};
 
 // GET /staff/login
 exports.loginForm = (req, res) => {
@@ -67,24 +88,19 @@ exports.logout = (req, res) => {
   res.redirect('/login');
 };
 
-// GET /staff — the portal
+// GET /staff — staff dashboard: what I hold, my requests, claims and bookings
 exports.portal = async (req, res, next) => {
   try {
     const user = req.staff;
 
-    const products = await Product.find().sort({ category: 1, name: 1 }).lean();
+    const myItems = await Product.find({ assignedTo: user._id })
+      .sort({ occupiedAt: 1 })
+      .lean();
 
-    // Names of everyone holding something, for the status lines
-    const holderIds = [...new Set(products.filter((p) => p.assignedTo).map((p) => String(p.assignedTo)))];
-    const holders = holderIds.length
-      ? await User.find({ _id: { $in: holderIds } }, 'name').lean()
-      : [];
-    const holderMap = holders.reduce((acc, h) => ({ ...acc, [String(h._id)]: h.name }), {});
-
-    const myItems = products.filter((p) => p.assignedTo && String(p.assignedTo) === String(user._id));
     const myRequests = await AssignmentRequest.find({ user: user._id, status: 'pending' })
       .sort({ createdAt: -1 })
       .lean();
+
     const myBookings = await Booking.find({
       user: user._id,
       status: { $in: ['pending', 'confirmed'] },
@@ -92,12 +108,6 @@ exports.portal = async (req, res, next) => {
     })
       .sort({ bookedFor: 1 })
       .lean();
-
-    // My open requests by product, so the buttons match the bot's behaviour
-    const pendingByProduct = myRequests.reduce(
-      (acc, r) => ({ ...acc, [String(r.product)]: r }),
-      {}
-    );
 
     // Bookings waiting for ME to submit an item I am holding
     const myItemIds = myItems.map((p) => p._id);
@@ -114,13 +124,73 @@ exports.portal = async (req, res, next) => {
       return acc;
     }, {});
 
-    // Next-in-line claims: who is waiting on what
+    // Next-in-line claims: someone waiting on an item I hold, plus my own claims
     const waitingClaims = await NextClaim.find({ status: 'waiting' }).lean();
     const claimByProduct = waitingClaims.reduce(
       (acc, c) => ({ ...acc, [String(c.product)]: c }),
       {}
     );
     const myClaims = waitingClaims.filter((c) => String(c.user) === String(user._id));
+
+    res.render('staff/dashboard', {
+      title: 'My dashboard',
+      layout: 'staff/layout',
+      active: 'staff-dashboard',
+      user,
+      myItems,
+      myRequests,
+      myBookings,
+      myClaims,
+      awaitingByProduct,
+      claimByProduct,
+      message: req.query.message || null,
+      error: req.query.error || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /staff/inventory — the full catalog with search and filters (same as admin)
+exports.inventory = async (req, res, next) => {
+  try {
+    const user = req.staff;
+    const { q, category, status } = req.query;
+
+    const filter = {};
+    if (q) {
+      filter.$or = [
+        { name: new RegExp(q, 'i') },
+        { assetTag: new RegExp(q, 'i') },
+        { brand: new RegExp(q, 'i') },
+        { serialNumber: new RegExp(q, 'i') },
+      ];
+    }
+    if (category) filter.category = category;
+    if (status) filter.status = status;
+
+    const products = await Product.find(filter).sort({ category: 1, name: 1 }).lean();
+
+    // Names of everyone holding something, for the status lines
+    const holderIds = [...new Set(products.filter((p) => p.assignedTo).map((p) => String(p.assignedTo)))];
+    const holders = holderIds.length
+      ? await User.find({ _id: { $in: holderIds } }, 'name').lean()
+      : [];
+    const holderMap = holders.reduce((acc, h) => ({ ...acc, [String(h._id)]: h.name }), {});
+
+    // My open requests by product, so the buttons match the bot's behaviour
+    const myRequests = await AssignmentRequest.find({ user: user._id, status: 'pending' }).lean();
+    const pendingByProduct = myRequests.reduce(
+      (acc, r) => ({ ...acc, [String(r.product)]: r }),
+      {}
+    );
+
+    // Next-in-line claims: who is waiting on what
+    const waitingClaims = await NextClaim.find({ status: 'waiting' }).lean();
+    const claimByProduct = waitingClaims.reduce(
+      (acc, c) => ({ ...acc, [String(c.product)]: c }),
+      {}
+    );
 
     // Today's confirmed bookings, so a reserved item says so
     const bookedToday = await Booking.find({ status: 'confirmed', bookedFor: todayKey() }).lean();
@@ -141,20 +211,19 @@ exports.portal = async (req, res, next) => {
       groupMap.get(p.category).items.push(p);
     });
 
-    res.render('staff/portal', {
-      title: 'Studio tools',
+    res.render('staff/inventory', {
+      title: 'Inventory',
       layout: 'staff/layout',
+      active: 'staff-inventory',
       user,
       groups,
       holderMap,
-      myItems,
-      myRequests,
-      myBookings,
       pendingByProduct,
       claimByProduct,
-      myClaims,
-      awaitingByProduct,
       bookedTodayByProduct,
+      categories: CATEGORIES,
+      statuses: STATUSES,
+      query: { q: q || '', category: category || '', status: status || '' },
       todayKey: todayKey(),
       message: req.query.message || null,
       error: req.query.error || null,
@@ -169,31 +238,31 @@ exports.occupy = async (req, res, next) => {
   try {
     const user = req.staff;
     const reason = (req.body.reason || '').trim().slice(0, 120);
-    if (reason.length < 2) return back(res, 'Please give a short reason first');
+    if (reason.length < 2) return back(req, res, 'Please give a short reason first');
 
     const product = await Product.findById(req.params.id);
-    if (!product) return back(res, 'That instrument no longer exists');
+    if (!product) return back(req, res, 'That item no longer exists');
 
     if (user.accountType === 'power') {
       try {
         await occupyProduct({ product, user, reason, source: 'web' });
-        return back(res, `${product.name} is now with you`);
+        return back(req, res, `${product.name} is now with you`);
       } catch (err) {
-        return back(res, err.message);
+        return back(req, res, err.message);
       }
     }
 
     // Normal account: file a request for the admin
-    if (product.assignedTo) return back(res, 'Someone just took it');
+    if (product.assignedTo) return back(req, res, 'Someone just took it');
     if (product.condition === 'retired' || product.status === 'maintenance' || product.condition === 'needs-repair') {
-      return back(res, 'This instrument is not available right now');
+      return back(req, res, 'This item is not available right now');
     }
     const duplicate = await AssignmentRequest.findOne({
       user: user._id,
       product: product._id,
       status: 'pending',
     });
-    if (duplicate) return back(res, 'You have already asked for this one — waiting for the admin');
+    if (duplicate) return back(req, res, 'You have already asked for this one — waiting for the admin');
 
     const request = await AssignmentRequest.create({
       product: product._id,
@@ -220,7 +289,7 @@ exports.occupy = async (req, res, next) => {
       }
     );
 
-    back(res, 'Request sent to the admin — you will be notified on Telegram when it is decided');
+    back(req, res, 'Request sent to the admin — you will be notified on Telegram when it is decided');
   } catch (err) {
     next(err);
   }
@@ -231,12 +300,12 @@ exports.returnItem = async (req, res, next) => {
   try {
     const user = req.staff;
     const product = await Product.findById(req.params.id);
-    if (!product) return back(res, 'That instrument no longer exists');
+    if (!product) return back(req, res, 'That item no longer exists');
     if (!product.assignedTo || String(product.assignedTo) !== String(user._id)) {
-      return back(res, 'That one is not with you');
+      return back(req, res, 'That one is not with you');
     }
     await releaseProduct({ product, source: 'web' });
-    back(res, `${product.name} is back on the shelf — thank you`);
+    back(req, res, `${product.name} is back on the shelf — thank you`);
   } catch (err) {
     next(err);
   }
@@ -249,11 +318,11 @@ exports.book = async (req, res, next) => {
     const dateKey = (req.body.date || '').trim();
     const reason = (req.body.reason || '').trim().slice(0, 120);
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return back(res, 'Pick a date for the booking');
-    if (reason.length < 2) return back(res, 'Please give a short reason for the booking');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return back(req, res, 'Pick a date for the booking');
+    if (reason.length < 2) return back(req, res, 'Please give a short reason for the booking');
 
     const product = await Product.findById(req.params.id).lean();
-    if (!product) return back(res, 'That instrument no longer exists');
+    if (!product) return back(req, res, 'That item no longer exists');
 
     try {
       const booking = await createBooking({ product, user, dateKey, reason, source: 'web' });
@@ -264,7 +333,7 @@ exports.book = async (req, res, next) => {
           : `Booking sent to the admin to confirm for ${formatDay(dateKey)} — you will be notified on Telegram`
       );
     } catch (err) {
-      return back(res, err.message);
+      return back(req, res, err.message);
     }
   } catch (err) {
     next(err);
@@ -279,11 +348,11 @@ exports.cancelRequest = async (req, res, next) => {
       user: req.staff._id,
       status: 'pending',
     });
-    if (!request) return back(res, 'That request has already been dealt with');
+    if (!request) return back(req, res, 'That request has already been dealt with');
     request.status = 'cancelled';
     request.decidedAt = new Date();
     await request.save();
-    back(res, 'Request cancelled');
+    back(req, res, 'Request cancelled');
   } catch (err) {
     next(err);
   }
@@ -297,11 +366,11 @@ exports.cancelBooking = async (req, res, next) => {
       user: req.staff._id,
       status: { $in: ['pending', 'confirmed'] },
     });
-    if (!booking) return back(res, 'That booking has already been dealt with');
+    if (!booking) return back(req, res, 'That booking has already been dealt with');
     booking.status = 'cancelled';
     booking.decidedAt = new Date();
     await booking.save();
-    back(res, 'Booking cancelled');
+    back(req, res, 'Booking cancelled');
   } catch (err) {
     next(err);
   }
@@ -312,10 +381,10 @@ exports.claim = async (req, res, next) => {
   try {
     const user = req.staff;
     const reason = (req.body.reason || '').trim().slice(0, 120);
-    if (reason.length < 2) return back(res, 'Please give a short reason first');
+    if (reason.length < 2) return back(req, res, 'Please give a short reason first');
 
     const product = await Product.findById(req.params.id).lean();
-    if (!product) return back(res, 'That instrument no longer exists');
+    if (!product) return back(req, res, 'That item no longer exists');
 
     try {
       const claim = await createClaim({ product, user, reason, source: 'web' });
@@ -324,7 +393,7 @@ exports.claim = async (req, res, next) => {
         `You are next in line for ${product.name} — ${claim.holderName || 'the holder'} has been asked to release it`
       );
     } catch (err) {
-      return back(res, err.message);
+      return back(req, res, err.message);
     }
   } catch (err) {
     next(err);
@@ -339,11 +408,11 @@ exports.cancelClaim = async (req, res, next) => {
       user: req.staff._id,
       status: 'waiting',
     });
-    if (!claim) return back(res, 'That claim has already been dealt with');
+    if (!claim) return back(req, res, 'That claim has already been dealt with');
     claim.status = 'cancelled';
     claim.decidedAt = new Date();
     await claim.save();
-    back(res, 'Claim cancelled');
+    back(req, res, 'Claim cancelled');
   } catch (err) {
     next(err);
   }
@@ -353,7 +422,7 @@ exports.cancelClaim = async (req, res, next) => {
 exports.releaseClaim = async (req, res, next) => {
   try {
     const result = await releaseForClaim(req.params.id, req.staff);
-    back(res, result.message);
+    back(req, res, result.message);
   } catch (err) {
     next(err);
   }
@@ -363,7 +432,7 @@ exports.releaseClaim = async (req, res, next) => {
 exports.keepClaim = async (req, res, next) => {
   try {
     const result = await keepDespiteClaim(req.params.id, req.staff);
-    back(res, result.message);
+    back(req, res, result.message);
   } catch (err) {
     next(err);
   }

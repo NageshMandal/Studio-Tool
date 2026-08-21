@@ -1,6 +1,6 @@
 <section class="panel panel-form">
   <div class="panel-head">
-    <h2><%= isEdit ? 'Edit instrument' : 'New instrument' %></h2>
+    <h2><%= isEdit ? 'Edit item' : 'New item' %></h2>
     <a class="btn btn-ghost" href="/admin/products">Back to list</a>
   </div>
 
@@ -17,7 +17,7 @@
   <form method="POST" action="<%= formAction %>">
     <div class="grid-2">
       <label class="field">
-        <span>Instrument name</span>
+        <span>Item name</span>
         <input type="text" name="name" value="<%= product.name || '' %>" placeholder="Sony FX3 body" required />
       </label>
 
@@ -101,14 +101,14 @@
       <label class="field span-2">
         <span>Image URL</span>
         <input type="url" name="imageUrl" id="imageUrl" value="<%= product.imageUrl || '' %>" placeholder="https://…" />
-        <span class="field-note">Shown on the dashboard, the instrument list and inside the Telegram bot.</span>
+        <span class="field-note">Shown on the dashboard, the item list and inside the Telegram bot.</span>
       </label>
 
       <div class="field span-2 preview-row">
         <span>Preview</span>
         <div class="preview-box" id="imagePreview">
           <% if (product.imageUrl) { %>
-            <img src="<%= product.imageUrl %>" alt="<%= product.name || 'Instrument' %>"
+            <img src="<%= product.imageUrl %>" alt="<%= product.name || 'Item' %>"
                  onerror="this.parentNode.innerHTML='<span class=\'preview-empty\'>That image could not be loaded</span>';" />
           <% } else { %>
             <span class="preview-empty">No image yet</span>
@@ -123,7 +123,7 @@
     </div>
 
     <div class="form-actions">
-      <button class="btn btn-primary" type="submit"><%= isEdit ? 'Save changes' : 'Add instrument' %></button>
+      <button class="btn btn-primary" type="submit"><%= isEdit ? 'Save changes' : 'Add item' %></button>
       <a class="btn btn-ghost" href="/admin/products">Cancel</a>
     </div>
   </form>

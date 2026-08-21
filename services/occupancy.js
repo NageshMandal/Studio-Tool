@@ -3,19 +3,19 @@ const Booking = require('../models/Booking');
 const { todayKey } = require('../utils/format');
 
 /**
- * The single place where an instrument changes hands. Both the Telegram bot
+ * The single place where an item changes hands. Both the Telegram bot
  * and the admin panel go through here so the usage log never has gaps.
  */
 
-// Someone picks an instrument up.
+// Someone picks an item up.
 async function occupyProduct({ product, user, reason, source = 'telegram' }) {
   if (product.assignedTo) {
-    const err = new Error('This instrument is already occupied');
+    const err = new Error('This item is already occupied');
     err.code = 'ALREADY_OCCUPIED';
     throw err;
   }
   if (product.condition === 'retired') {
-    const err = new Error('This instrument is retired and cannot be taken out');
+    const err = new Error('This item is retired and cannot be taken out');
     err.code = 'RETIRED';
     throw err;
   }
@@ -101,7 +101,7 @@ async function releaseProduct({ product, source = 'telegram', note, claims = tru
     if (!handedToBooker) await fulfillNextClaim(product);
   }
 
-  // Bookings that were waiting for this instrument to come back now go to
+  // Bookings that were waiting for this item to come back now go to
   // the admins for a confirm/cancel decision (lazy require avoids a cycle)
   try {
     const { activateHeldBookings } = require('./booking');

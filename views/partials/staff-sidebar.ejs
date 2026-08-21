@@ -1,0 +1,21 @@
+<aside class="sidebar">
+  <a class="brand" href="/staff">
+    <span class="brand-mark">SI</span>
+    <span class="brand-text">
+      Studio<br /><strong>Inventory</strong>
+    </span>
+  </a>
+
+  <nav class="nav">
+    <a class="nav-link <%= active === 'staff-dashboard' ? 'is-active' : '' %>" href="/staff">
+      <span class="nav-dot"></span> Dashboard
+    </a>
+    <a class="nav-link <%= active === 'staff-inventory' ? 'is-active' : '' %>" href="/staff/inventory">
+      <span class="nav-dot"></span> Inventory
+    </a>
+  </nav>
+
+  <div class="sidebar-foot">
+    <p>Signed in as <%= staff.name %> · <%= staff.accountType %> account.</p>
+  </div>
+</aside>

@@ -10,7 +10,7 @@ const { escapeHtml, todayKey, formatDay } = require('../utils/format');
 /**
  * Approval queue for normal users' item requests.
  *
- * A normal account can only *ask* for an instrument from the Telegram bot.
+ * A normal account can only *ask* for an item from the Telegram bot.
  * The request lands here; approving it performs the same occupy as the
  * product edit form (so the usage log stays complete) and the bot messages
  * the person either way.

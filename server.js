@@ -55,9 +55,31 @@ app.use((req, res, next) => {
 // without signing in. Staff and admin sign-in links live in its header.
 const Product = require('./models/Product');
 const User = require('./models/User');
+const { CATEGORIES, STATUSES } = require('./controllers/productController');
 app.get('/', async (req, res, next) => {
   try {
-    const products = await Product.find().sort({ category: 1, name: 1 }).lean();
+    const { q, category, status } = req.query;
+
+    // The listing honours the filters; the stat cards at the top always
+    // show the whole register so the wall screen keeps its true totals.
+    const filter = {};
+    if (q) {
+      filter.$or = [
+        { name: new RegExp(q, 'i') },
+        { assetTag: new RegExp(q, 'i') },
+        { brand: new RegExp(q, 'i') },
+        { serialNumber: new RegExp(q, 'i') },
+      ];
+    }
+    if (category) filter.category = category;
+    if (status) filter.status = status;
+
+    const hasFilter = Boolean(q || category || status);
+    const [products, allProducts] = await Promise.all([
+      Product.find(filter).sort({ category: 1, name: 1 }).lean(),
+      hasFilter ? Product.find().lean() : null,
+    ]);
+    const statSource = allProducts || products;
 
     const holderIds = [...new Set(products.filter((p) => p.assignedTo).map((p) => String(p.assignedTo)))];
     const holders = holderIds.length ? await User.find({ _id: { $in: holderIds } }, 'name').lean() : [];
@@ -65,10 +87,10 @@ app.get('/', async (req, res, next) => {
 
     const isBlocked = (p) => p.condition === 'retired' || p.status === 'maintenance' || p.condition === 'needs-repair';
     const counts = {
-      total: products.length,
-      available: products.filter((p) => !p.assignedTo && !isBlocked(p)).length,
-      occupied: products.filter((p) => p.assignedTo).length,
-      maintenance: products.filter((p) => !p.assignedTo && isBlocked(p) && p.condition !== 'retired').length,
+      total: statSource.length,
+      available: statSource.filter((p) => !p.assignedTo && !isBlocked(p)).length,
+      occupied: statSource.filter((p) => p.assignedTo).length,
+      maintenance: statSource.filter((p) => !p.assignedTo && isBlocked(p) && p.condition !== 'retired').length,
     };
 
     const groups = [];
@@ -84,7 +106,15 @@ app.get('/', async (req, res, next) => {
       if (!p.assignedTo && !isBlocked(p)) g.available += 1;
     });
 
-    res.render('public-catalog', { layout: false, groups, holderMap, counts });
+    res.render('public-catalog', {
+      layout: false,
+      groups,
+      holderMap,
+      counts,
+      categories: CATEGORIES,
+      statuses: STATUSES,
+      query: { q: q || '', category: category || '', status: status || '' },
+    });
   } catch (err) {
     next(err);
   }

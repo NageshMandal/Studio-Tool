@@ -15,6 +15,7 @@ router.post('/logout', staff.logout);
 router.use(protectStaff);
 
 router.get('/', staff.portal);
+router.get('/inventory', staff.inventory);
 router.post('/occupy/:id', staff.occupy);
 router.post('/return/:id', staff.returnItem);
 router.post('/book/:id', staff.book);

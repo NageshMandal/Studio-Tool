@@ -130,7 +130,7 @@ async function finishBooking(bot, chatId, user, productId, dateKey, reason, ack,
   clearSession(chatId);
 
   if (!product) {
-    if (ack) await ack('That instrument is gone');
+    if (ack) await ack('That item is gone');
     return send(bot, chatId, views.mainMenu(user));
   }
 
@@ -144,7 +144,7 @@ async function finishBooking(bot, chatId, user, productId, dateKey, reason, ack,
         text:
           `⏳ Your booking for <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> on <b>${escapeHtml(formatDay(dateKey))}</b> has been filed.\n` +
           `📝 For: ${escapeHtml(booking.reason || '—')}\n\n` +
-          `The instrument is currently with <b>${escapeHtml(booking.holderNameAtCreation || 'someone')}</b> — ` +
+          `The item is currently with <b>${escapeHtml(booking.holderNameAtCreation || 'someone')}</b> — ` +
           `they have been asked to submit it once their work is done. ` +
           `The admin will then confirm or cancel your booking, and you will get a message here either way.`,
         photo: product.imageUrl || null,
@@ -193,7 +193,7 @@ async function finishClaim(bot, chatId, user, productId, reason, ack, query) {
   clearSession(chatId);
 
   if (!product) {
-    if (ack) await ack('That instrument is gone');
+    if (ack) await ack('That item is gone');
     return send(bot, chatId, views.mainMenu(user));
   }
 
@@ -268,7 +268,7 @@ async function finishOccupy(bot, chatId, user, productId, reason, ack, query) {
   clearSession(chatId);
 
   if (!product) {
-    if (ack) await ack('That instrument is gone');
+    if (ack) await ack('That item is gone');
     return send(bot, chatId, views.mainMenu(user));
   }
 
@@ -295,7 +295,7 @@ async function finishOccupy(bot, chatId, user, productId, reason, ack, query) {
     const problem = product.assignedTo
       ? 'Someone just took it'
       : views.blockedReason(product)
-        ? 'This instrument is not available right now'
+        ? 'This item is not available right now'
         : null;
 
     if (problem) {
@@ -403,7 +403,7 @@ async function handleMessage(bot, msg) {
           '/mine — what you are holding',
           '/logout — sign out of this chat',
           '',
-          'Tap <b>Occupy now</b> to take an instrument, and <b>Submit item</b> when you bring it back.',
+          'Tap <b>Occupy now</b> to take an item, and <b>Submit item</b> when you bring it back.',
         ].join('\n'),
         HTML
       );
@@ -745,7 +745,7 @@ async function handleCallback(bot, query) {
   if (data.startsWith('nxt:')) {
     const product = await Product.findById(data.slice(4)).lean();
     if (!product) {
-      await ack('That instrument is gone');
+      await ack('That item is gone');
       return replace(bot, query, views.mainMenu(user));
     }
     if (!product.assignedTo) {
@@ -837,7 +837,7 @@ async function handleCallback(bot, query) {
   if (data.startsWith('occ:')) {
     const product = await Product.findById(data.slice(4)).lean();
     if (!product) {
-      await ack('That instrument is gone');
+      await ack('That item is gone');
       return replace(bot, query, views.mainMenu(user));
     }
     if (product.assignedTo) {
@@ -861,11 +861,11 @@ async function handleCallback(bot, query) {
   if (data.startsWith('bk:')) {
     const product = await Product.findById(data.slice(3)).lean();
     if (!product) {
-      await ack('That instrument is gone');
+      await ack('That item is gone');
       return replace(bot, query, views.mainMenu(user));
     }
     if (product.condition === 'retired') {
-      await ack('This instrument is retired');
+      await ack('This item is retired');
       return replace(bot, query, await itemDetailView(product, user));
     }
     await ack();
@@ -878,7 +878,7 @@ async function handleCallback(bot, query) {
     const [, productId, dateKey] = data.split(':');
     const product = await Product.findById(productId).lean();
     if (!product) {
-      await ack('That instrument is gone');
+      await ack('That item is gone');
       return replace(bot, query, views.mainMenu(user));
     }
     await ack();
@@ -971,7 +971,7 @@ async function handleCallback(bot, query) {
   if (data.startsWith('ret:')) {
     const product = await Product.findById(data.slice(4));
     if (!product) {
-      await ack('That instrument is gone');
+      await ack('That item is gone');
       return replace(bot, query, views.mainMenu(user));
     }
 

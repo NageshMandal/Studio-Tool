@@ -28,11 +28,11 @@ async function approveRequest(requestId, decidedBy) {
 
   // The world may have moved on since the request was made
   let failure = null;
-  if (!product) failure = 'The instrument no longer exists';
+  if (!product) failure = 'The item no longer exists';
   else if (!user || user.status !== 'active') failure = 'The person is no longer active';
-  else if (product.assignedTo) failure = 'The instrument is already with someone else';
-  else if (product.condition === 'retired') failure = 'The instrument has been retired';
-  else if (product.status === 'maintenance' || product.condition === 'needs-repair') failure = 'The instrument is in maintenance';
+  else if (product.assignedTo) failure = 'The item is already with someone else';
+  else if (product.condition === 'retired') failure = 'The item has been retired';
+  else if (product.status === 'maintenance' || product.condition === 'needs-repair') failure = 'The item is in maintenance';
 
   if (failure) {
     request.status = 'rejected';
@@ -104,9 +104,9 @@ async function approveBooking(bookingId, decidedBy) {
   const product = await Product.findById(booking.product);
 
   let failure = null;
-  if (!product) failure = 'The instrument no longer exists';
+  if (!product) failure = 'The item no longer exists';
   else if (!user || user.status !== 'active') failure = 'The person is no longer active';
-  else if (product.condition === 'retired') failure = 'The instrument has been retired';
+  else if (product.condition === 'retired') failure = 'The item has been retired';
   else if (booking.bookedFor < todayKey()) failure = 'The booked day has already passed';
   else {
     const clash = await Booking.findOne({
@@ -139,7 +139,7 @@ async function approveBooking(bookingId, decidedBy) {
   booking.decidedBy = decidedBy || null;
   await booking.save();
 
-  // If the booking is for TODAY and the instrument is free, don't make the
+  // If the booking is for TODAY and the item is free, don't make the
   // person come and occupy it — hand it to them right now. Future days are
   // handled by the scheduler; an item still out with someone else is handed
   // over the moment it comes back (see services/bookingAutoAssign.js).

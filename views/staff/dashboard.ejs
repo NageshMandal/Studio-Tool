@@ -1,0 +1,110 @@
+<% if (message) { %>
+  <div class="alert alert-info"><%= message %></div>
+<% } %>
+<% if (error) { %>
+  <div class="alert alert-error"><%= error %></div>
+<% } %>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>You are holding <%= myItems.length %> item<%= myItems.length === 1 ? '' : 's' %></h2>
+    <a class="btn btn-primary" href="/staff/inventory">Browse inventory</a>
+  </div>
+  <% if (myItems.length === 0) { %>
+    <div class="empty"><p>Nothing is with you right now. Head to the inventory to take or book an item.</p></div>
+  <% } else { %>
+    <table class="table">
+      <tbody>
+        <% myItems.forEach(function (p) { %>
+          <tr>
+            <td class="thumb-cell"><%- include('../partials/thumb', { thumbUrl: p.imageUrl, thumbName: p.name }) %></td>
+            <td>
+              <span class="row-title"><%= p.name %></span>
+              <span class="row-sub"><span class="asset-tag"><%= p.assetTag %></span> · taken <%= formatWhen(p.occupiedAt) %> (<%= formatSince(p.occupiedAt) %> ago)</span>
+              <% if (p.occupyReason) { %><span class="row-sub">📝 <%= p.occupyReason %></span><% } %>
+              <% var holdClaim = claimByProduct[String(p._id)]; %>
+              <% if (holdClaim) { %>
+                <span class="row-sub">⚡ <strong><%= holdClaim.userName %></strong> is waiting for this<% if (holdClaim.reason) { %> — 📝 <%= holdClaim.reason %><% } %></span>
+              <% } %>
+              <% (awaitingByProduct[String(p._id)] || []).forEach(function (ab) { %>
+                <span class="row-sub">📅 <strong><%= ab.userName %></strong> booked this for <strong><%= formatDay(ab.bookedFor) %></strong> — please submit it when your work is done</span>
+              <% }); %>
+            </td>
+            <td class="right staff-actions">
+              <% var holdClaim2 = claimByProduct[String(p._id)]; %>
+              <% if (holdClaim2) { %>
+                <form method="POST" action="/staff/claims/<%= holdClaim2._id %>/release">
+                  <button class="btn btn-primary btn-small" type="submit">Release to <%= holdClaim2.userName.split(' ')[0] %></button>
+                </form>
+                <form method="POST" action="/staff/claims/<%= holdClaim2._id %>/keep">
+                  <button class="btn btn-ghost btn-small" type="submit">Keep it</button>
+                </form>
+              <% } else { %>
+                <form method="POST" action="/staff/return/<%= p._id %>">
+                  <button class="btn btn-primary btn-small" type="submit">Submit item</button>
+                </form>
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>Waiting and booked</h2></div>
+  <% if (myRequests.length === 0 && myBookings.length === 0 && myClaims.length === 0) { %>
+    <div class="empty"><p>No pending requests, claims or bookings. Anything you request or book from the <a href="/staff/inventory">inventory</a> shows up here.</p></div>
+  <% } else { %>
+    <table class="table">
+      <tbody>
+        <% myRequests.forEach(function (r) { %>
+          <tr>
+            <td>
+              <span class="row-title">⏳ <%= r.productName %></span>
+              <span class="row-sub"><span class="asset-tag"><%= r.assetTag || '—' %></span> · asked <%= formatWhen(r.createdAt) %> · waiting for admin approval</span>
+              <% if (r.reason) { %><span class="row-sub">📝 <%= r.reason %></span><% } %>
+            </td>
+            <td class="right">
+              <form method="POST" action="/staff/requests/<%= r._id %>/cancel">
+                <button class="btn btn-ghost btn-small" type="submit">Cancel request</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+        <% myClaims.forEach(function (c) { %>
+          <tr>
+            <td>
+              <span class="row-title">⚡ <%= c.productName %> — next in line</span>
+              <span class="row-sub"><span class="asset-tag"><%= c.assetTag || '—' %></span> · with <%= c.holderName || 'someone' %> · comes to you when released</span>
+              <% if (c.reason) { %><span class="row-sub">📝 <%= c.reason %></span><% } %>
+            </td>
+            <td class="right">
+              <form method="POST" action="/staff/claims/<%= c._id %>/cancel">
+                <button class="btn btn-ghost btn-small" type="submit">Cancel claim</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+        <% myBookings.forEach(function (b) { %>
+          <tr>
+            <td>
+              <span class="row-title">📅 <%= b.productName %> — <%= formatDay(b.bookedFor) %></span>
+              <span class="row-sub">
+                <span class="asset-tag"><%= b.assetTag || '—' %></span> ·
+                <% if (b.status === 'confirmed') { %><span class="pill pill-available">confirmed</span><% } else if (b.awaitingReturn) { %><span class="pill pill-assigned">waiting for the item to be submitted</span><% } else { %><span class="pill pill-maintenance">waiting for admin</span><% } %>
+              </span>
+              <% if (b.reason) { %><span class="row-sub">📝 <%= b.reason %></span><% } %>
+            </td>
+            <td class="right">
+              <form method="POST" action="/staff/bookings/<%= b._id %>/cancel">
+                <button class="btn btn-ghost btn-small" type="submit">Cancel booking</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</section>

@@ -22,13 +22,13 @@
       <a class="btn btn-ghost" href="/admin/products">Reset</a>
     </form>
 
-    <a class="btn btn-primary" href="/admin/products/new">Add instrument</a>
+    <a class="btn btn-primary" href="/admin/products/new">Add item</a>
   </div>
 
   <% if (products.length === 0) { %>
     <div class="empty">
-      <p>No instruments match this view.</p>
-      <a class="btn btn-primary" href="/admin/products/new">Add instrument</a>
+      <p>No items match this view.</p>
+      <a class="btn btn-primary" href="/admin/products/new">Add item</a>
     </div>
   <% } else { %>
     <table class="table">
@@ -36,7 +36,7 @@
         <tr>
           <th></th>
           <th>Asset tag</th>
-          <th>Instrument</th>
+          <th>Item</th>
           <th>Category</th>
           <th>Condition</th>
           <th>Availability</th>

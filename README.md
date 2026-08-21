@@ -1,6 +1,6 @@
 # Office Studio Inventory — Admin Panel
 
-Node.js + Express + EJS + MongoDB admin panel for tracking studio instruments and the staff who use them. The single admin account lives in `.env`; every protected route checks a JWT.
+Node.js + Express + EJS + MongoDB admin panel for tracking studio inventory and the staff who use them. The single admin account lives in `.env`; every protected route checks a JWT.
 
 ## Run it
 
@@ -27,7 +27,7 @@ Make sure MongoDB is running locally, or point `MONGO_URI` at an Atlas cluster.
 | --- | --- |
 | `/login` | Admin sign in |
 | `/admin/dashboard` | Counts, register value, recently added items |
-| `/admin/products` | All instruments, with search and category/status filters |
+| `/admin/products` | Inventory — all items, with search and category/status filters |
 | `/admin/products/new` | Add an instrument |
 | `/admin/products/:id/edit` | Edit or reassign an instrument |
 | `/admin/users` | All staff, with search and filters, inline password reset and activate/deactivate |
@@ -143,7 +143,12 @@ The booker is told the outcome on Telegram either way. Other rules: bookings mus
 
 ## Staff website (`/staff`)
 
-Staff can use a browser instead of (or as well as) the bot. They sign in at `/staff/login` with the **same email and password** as the Telegram bot. The portal shows:
+Staff can use a browser instead of (or as well as) the bot. They sign in at `/staff/login` with the **same email and password** as the Telegram bot. The portal now has its own sidebar with two pages:
+
+- **Dashboard** (`/staff`) — everything that concerns *them*: items they are holding (with Submit buttons), pending requests, next-in-line claims, and upcoming bookings, each with a cancel button.
+- **Inventory** (`/staff/inventory`) — the full catalog by category with live status, plus the same search + category/status filter bar as the admin panel. Per item: **Occupy now** (power) or **Request item** (normal), **⚡ Book next**, and **Book a date**.
+
+It shows:
 
 - What they are holding, with a **Submit item** button to return things.
 - Their pending requests and upcoming bookings, each with a cancel button.

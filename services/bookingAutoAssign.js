@@ -7,7 +7,7 @@ const { notifyUser } = require('../bot/notify');
 /**
  * Auto-assignment of confirmed bookings.
  *
- * Once an admin confirms a booking, the instrument should end up in the
+ * Once an admin confirms a booking, the item should end up in the
  * booker's hands on the booked day without anyone having to tap Occupy:
  *
  *  - Booking confirmed for TODAY and the item is free  → assigned on the spot
@@ -23,7 +23,7 @@ const { notifyUser } = require('../bot/notify');
  */
 
 /**
- * Hand the instrument to the booker and stamp the booking as fulfilled.
+ * Hand the item to the booker and stamp the booking as fulfilled.
  * Assumes the caller has checked the product is actually free.
  * Pass notify: false when the caller sends its own combined message.
  */
@@ -145,7 +145,7 @@ function startBookingScheduler(intervalMs = 5 * 60 * 1000) {
     running = true;
     try {
       const n = await autoAssignDueBookings();
-      if (n > 0) console.log(`Booking auto-assign: handed out ${n} instrument(s)`);
+      if (n > 0) console.log(`Booking auto-assign: handed out ${n} item(s)`);
     } catch (err) {
       console.error('Booking auto-assign pass failed:', err.message);
     } finally {

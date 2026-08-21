@@ -98,7 +98,7 @@ exports.list = async (req, res, next) => {
       .populate('assignedTo', 'name email');
 
     res.render('products/index', {
-      title: 'Instruments',
+      title: 'Inventory',
       active: 'products',
       products,
       categories: CATEGORIES,
@@ -116,7 +116,7 @@ exports.newForm = async (req, res, next) => {
   try {
     const users = await User.find({ status: 'active' }).sort({ name: 1 });
     res.render('products/form', {
-      title: 'Add instrument',
+      title: 'Add item',
       active: 'products',
       product: {},
       users,
@@ -141,11 +141,11 @@ exports.create = async (req, res, next) => {
       const holder = await User.findById(req.body.assignedTo);
       if (holder) await occupyProduct({ product, user: holder, reason: req.body.reason, source: 'admin' });
     }
-    res.redirect('/admin/products?message=Instrument added');
+    res.redirect('/admin/products?message=Item added');
   } catch (err) {
     const users = await User.find({ status: 'active' }).sort({ name: 1 });
     res.status(400).render('products/form', {
-      title: 'Add instrument',
+      title: 'Add item',
       active: 'products',
       product: req.body,
       users,
@@ -166,7 +166,7 @@ exports.editForm = async (req, res, next) => {
       Product.findById(req.params.id),
       User.find({ status: 'active' }).sort({ name: 1 }),
     ]);
-    if (!product) return res.redirect('/admin/products?message=Instrument not found');
+    if (!product) return res.redirect('/admin/products?message=Item not found');
 
     res.render('products/form', {
       title: `Edit ${product.name}`,
@@ -189,7 +189,7 @@ exports.editForm = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) return res.redirect('/admin/products?message=Instrument not found');
+    if (!product) return res.redirect('/admin/products?message=Item not found');
 
     const previousAssignee = product.assignedTo;
     Object.assign(product, cleanBody(req.body));
@@ -207,11 +207,11 @@ exports.update = async (req, res, next) => {
       source: 'admin',
     });
 
-    res.redirect('/admin/products?message=Instrument updated');
+    res.redirect('/admin/products?message=Item updated');
   } catch (err) {
     const users = await User.find({ status: 'active' }).sort({ name: 1 });
     res.status(400).render('products/form', {
-      title: 'Edit instrument',
+      title: 'Edit item',
       active: 'products',
       product: { ...req.body, _id: req.params.id },
       users,
@@ -230,20 +230,23 @@ exports.remove = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id);
     if (product && product.assignedTo) {
-      await releaseProduct({ product, source: 'admin', note: 'Instrument removed from the register' });
+      await releaseProduct({ product, source: 'admin', note: 'Item removed from the register' });
     }
     // Any open requests for it can no longer be honoured
     await AssignmentRequest.updateMany(
       { product: req.params.id, status: 'pending' },
-      { status: 'cancelled', decidedAt: new Date(), decisionNote: 'Instrument removed from the register' }
+      { status: 'cancelled', decidedAt: new Date(), decisionNote: 'Item removed from the register' }
     );
     await NextClaim.updateMany(
       { product: req.params.id, status: 'waiting' },
-      { status: 'cancelled', decidedAt: new Date(), decisionNote: 'Instrument removed from the register' }
+      { status: 'cancelled', decidedAt: new Date(), decisionNote: 'Item removed from the register' }
     );
     await Product.findByIdAndDelete(req.params.id);
-    res.redirect('/admin/products?message=Instrument removed');
+    res.redirect('/admin/products?message=Item removed');
   } catch (err) {
     next(err);
   }
 };
+// Shared with the staff portal so both filter forms show the same options
+exports.CATEGORIES = CATEGORIES;
+exports.STATUSES = STATUSES;

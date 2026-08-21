@@ -24,7 +24,7 @@ exports.list = async (req, res, next) => {
 
     const users = await User.find(filter).sort({ createdAt: -1 }).lean();
 
-    // How many instruments each person is holding
+    // How many items each person is holding
     const counts = await Product.aggregate([
       { $match: { assignedTo: { $ne: null } } },
       { $group: { _id: '$assignedTo', count: { $sum: 1 } } },
