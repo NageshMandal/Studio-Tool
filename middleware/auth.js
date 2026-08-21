@@ -30,17 +30,30 @@ const protect = (req, res, next) => {
   }
 };
 
-// Sends an already signed-in admin straight to the dashboard
+// Sends someone who is already signed in to the right home page:
+// admins to the dashboard, staff to the portal.
 const redirectIfAuth = (req, res, next) => {
   const token = readToken(req);
-  if (!token) return next();
-  try {
-    jwt.verify(token, process.env.JWT_SECRET);
-    return res.redirect('/admin/dashboard');
-  } catch (err) {
-    res.clearCookie('token');
-    return next();
+  if (token) {
+    try {
+      jwt.verify(token, process.env.JWT_SECRET);
+      return res.redirect('/admin/dashboard');
+    } catch (err) {
+      res.clearCookie('token');
+    }
   }
+
+  const staffToken = req.cookies && req.cookies.staffToken;
+  if (staffToken) {
+    try {
+      const decoded = jwt.verify(staffToken, process.env.JWT_SECRET);
+      if (decoded.role === 'staff') return res.redirect('/staff');
+    } catch (err) {
+      res.clearCookie('staffToken');
+    }
+  }
+
+  return next();
 };
 
 module.exports = { protect, redirectIfAuth };

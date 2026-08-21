@@ -139,18 +139,50 @@ async function approveBooking(bookingId, decidedBy) {
   booking.decidedBy = decidedBy || null;
   await booking.save();
 
+  // If the booking is for TODAY and the instrument is free, don't make the
+  // person come and occupy it — hand it to them right now. Future days are
+  // handled by the scheduler; an item still out with someone else is handed
+  // over the moment it comes back (see services/bookingAutoAssign.js).
+  let autoAssigned = false;
+  const canAssignNow =
+    booking.bookedFor === todayKey() &&
+    !product.assignedTo &&
+    product.status !== 'maintenance' &&
+    product.condition !== 'needs-repair';
+
+  if (canAssignNow) {
+    try {
+      const { fulfillBooking } = require('./bookingAutoAssign');
+      await fulfillBooking(booking, product, user, { notify: false });
+      autoAssigned = true;
+    } catch (err) {
+      console.error(`Could not auto-assign booking ${booking._id}:`, err.message);
+    }
+  } else if (booking.bookedFor === todayKey() && product.assignedTo && String(product.assignedTo) === String(user._id)) {
+    // The booker already has it in hand — nothing to hand over
+    booking.fulfilledAt = new Date();
+    await booking.save();
+    autoAssigned = true;
+  }
+
   if (user.telegramChatId) {
     notifyUser(
       user.telegramChatId,
-      `✅ <b>Booking confirmed!</b> <b>${escapeHtml(booking.productName)}</b> <code>${escapeHtml(booking.assetTag || '')}</code> is reserved for you on <b>${escapeHtml(formatDay(booking.bookedFor))}</b>.\n` +
-        (booking.reason ? `📝 For: ${escapeHtml(booking.reason)}\n` : '') +
-        `\nOn the day, just occupy it as usual — it is held for you.`
+      autoAssigned
+        ? `✅ <b>Booking confirmed!</b> <b>${escapeHtml(booking.productName)}</b> <code>${escapeHtml(booking.assetTag || '')}</code> is for <b>today</b> — it has been <b>assigned to you</b> automatically.\n` +
+            (booking.reason ? `📝 For: ${escapeHtml(booking.reason)}\n` : '') +
+            `\nTap <b>Submit item</b> in /mine when you bring it back.`
+        : `✅ <b>Booking confirmed!</b> <b>${escapeHtml(booking.productName)}</b> <code>${escapeHtml(booking.assetTag || '')}</code> is reserved for you on <b>${escapeHtml(formatDay(booking.bookedFor))}</b>.\n` +
+            (booking.reason ? `📝 For: ${escapeHtml(booking.reason)}\n` : '') +
+            `\nIt will be assigned to you automatically on the day.`
     );
   }
 
   return {
     ok: true,
-    message: `Booking confirmed — ${booking.productName} on ${formatDay(booking.bookedFor)} for ${booking.userName}`,
+    message: autoAssigned
+      ? `Booking confirmed — ${booking.productName} is now with ${booking.userName}`
+      : `Booking confirmed — ${booking.productName} on ${formatDay(booking.bookedFor)} for ${booking.userName}`,
     booking,
   };
 }

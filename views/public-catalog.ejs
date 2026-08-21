@@ -16,8 +16,7 @@
       <span class="brand-text">Studio <strong>Inventory</strong></span>
     </span>
     <div class="staff-topbar-right">
-      <a class="btn btn-primary btn-small" href="/staff/login">Staff sign in</a>
-      <a class="btn btn-ghost btn-small" href="/login">Admin</a>
+      <a class="btn btn-primary btn-small" href="/login">Sign in</a>
     </div>
   </header>
 
@@ -71,6 +70,9 @@
                   <% } else if (p.assignedTo) { %>
                     <span class="pill pill-assigned">occupied</span>
                     <span class="row-sub">with <%= holderMap[String(p.assignedTo)] || 'someone' %> · since <%= formatWhen(p.occupiedAt) %></span>
+                    <% if (p.occupyReason) { %>
+                      <span class="row-sub">for: <%= p.occupyReason %></span>
+                    <% } %>
                   <% } else { %>
                     <span class="pill pill-available">available</span>
                   <% } %>
@@ -86,7 +88,7 @@
       <section class="panel"><div class="empty"><p>Nothing is on the register yet.</p></div></section>
     <% } %>
 
-    <p class="hint" style="text-align:center">Sign in as staff to occupy an item or book one for a date.</p>
+    <p class="hint" style="text-align:center">Sign in to occupy an item or book one for a date.</p>
   </main>
 </body>
 </html>

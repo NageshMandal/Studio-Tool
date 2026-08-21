@@ -44,6 +44,14 @@ const bookingSchema = new mongoose.Schema(
     source: { type: String, enum: ['telegram', 'web'], default: 'telegram' },
 
     decidedAt: { type: Date, default: null },
+
+    /**
+     * Set when the instrument was actually handed to the booker on the booked
+     * day (auto-assignment). A confirmed booking with fulfilledAt === null is
+     * still waiting for its day, or for the item to come back.
+     */
+    fulfilledAt: { type: Date, default: null },
+
     decisionNote: { type: String, trim: true, maxlength: 200, default: null },
     // Which admin decided it (email or name), for the audit trail
     decidedBy: { type: String, trim: true, default: null },

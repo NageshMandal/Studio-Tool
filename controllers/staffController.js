@@ -64,7 +64,7 @@ exports.login = async (req, res) => {
 // POST /staff/logout
 exports.logout = (req, res) => {
   res.clearCookie(STAFF_COOKIE);
-  res.redirect('/staff/login');
+  res.redirect('/login');
 };
 
 // GET /staff — the portal

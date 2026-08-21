@@ -14,7 +14,7 @@ const readToken = (req) => (req.cookies && req.cookies[COOKIE]) || null;
 // Blocks anything that is not a signed-in, active staff member
 const protectStaff = async (req, res, next) => {
   const token = readToken(req);
-  if (!token) return res.redirect('/staff/login?error=Please sign in to continue');
+  if (!token) return res.redirect('/login?error=Please sign in to continue');
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -28,7 +28,7 @@ const protectStaff = async (req, res, next) => {
     return next();
   } catch (err) {
     res.clearCookie(COOKIE);
-    return res.redirect('/staff/login?error=Session expired, sign in again');
+    return res.redirect('/login?error=Session expired, sign in again');
   }
 };
 

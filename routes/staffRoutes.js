@@ -2,9 +2,13 @@ const express = require('express');
 const router = express.Router();
 
 const staff = require('../controllers/staffController');
-const { protectStaff, redirectIfStaff } = require('../middleware/staffAuth');
+const { protectStaff } = require('../middleware/staffAuth');
 
-router.get('/login', redirectIfStaff, staff.loginForm);
+// The old staff sign-in page now lives at the single /login form
+router.get('/login', (req, res) => {
+  const error = req.query.error ? `?error=${encodeURIComponent(req.query.error)}` : '';
+  res.redirect(`/login${error}`);
+});
 router.post('/login', staff.login);
 router.post('/logout', staff.logout);
 

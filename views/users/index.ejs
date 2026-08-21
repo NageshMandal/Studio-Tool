@@ -34,7 +34,6 @@
       <thead>
         <tr>
           <th>Person</th>
-          <th>Employee ID</th>
           <th>Department</th>
           <th>Phone</th>
           <th>Holding</th>
@@ -56,7 +55,6 @@
               <% } %>
               <span class="row-sub"><%= u.email %></span>
             </td>
-            <td><span class="asset-tag"><%= u.employeeId || '—' %></span></td>
             <td><%= u.department %><% if (u.designation) { %><span class="row-sub"><%= u.designation %></span><% } %></td>
             <td><%= u.phone || '—' %></td>
             <td><%= u.itemsHeld %> item<%= u.itemsHeld === 1 ? '' : 's' %></td>

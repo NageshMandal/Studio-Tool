@@ -1,0 +1,75 @@
+<% if (message) { %>
+  <div class="alert alert-info"><%= message %></div>
+<% } %>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Admins</h2>
+    <a class="btn btn-primary" href="/admin/admins/new">Add admin</a>
+  </div>
+
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Admin</th>
+        <th>Telegram</th>
+        <th>Status</th>
+        <th>Added by</th>
+        <th>Added</th>
+        <th class="right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <span class="row-title"><%= rootName %> <span class="pill pill-power">root</span></span>
+          <span class="row-sub"><%= rootEmail %></span>
+        </td>
+        <td><span class="row-sub">via ADMIN_TELEGRAM_CHAT_ID in .env</span></td>
+        <td><span class="pill pill-active">active</span></td>
+        <td>—</td>
+        <td>—</td>
+        <td class="right"><span class="row-sub">managed in .env</span></td>
+      </tr>
+      <% admins.forEach(function (a) { %>
+        <tr>
+          <td>
+            <span class="row-title"><%= a.name %><% if (me && String(me.id) === String(a._id)) { %> <span class="pill pill-available">you</span><% } %></span>
+            <span class="row-sub"><%= a.email %></span>
+          </td>
+          <td>
+            <% if (a.telegramChatId) { %>
+              <span class="pill pill-available">linked</span>
+              <% if (a.telegramUsername) { %><span class="row-sub">@<%= a.telegramUsername %></span><% } %>
+            <% } else { %>
+              <span class="row-sub">not linked</span>
+            <% } %>
+          </td>
+          <td>
+            <span class="pill pill-<%= a.status %>"><%= a.status %></span>
+          </td>
+          <td><%= a.createdBy || '—' %></td>
+          <td><%= formatDate(a.createdAt) %></td>
+          <td class="right">
+            <% var self = me && String(me.id) === String(a._id); %>
+            <form class="inline pw-form" method="POST" action="/admin/admins/<%= a._id %>/password?_method=PATCH">
+              <input class="pw-input" type="password" name="password" placeholder="New password" minlength="6" required />
+              <button class="btn btn-small" type="submit">Set</button>
+            </form>
+            <% if (!self) { %>
+              <form class="inline" method="POST" action="/admin/admins/<%= a._id %>/status?_method=PATCH">
+                <button class="btn btn-small" type="submit"><%= a.status === 'active' ? 'Deactivate' : 'Activate' %></button>
+              </form>
+              <form class="inline" method="POST" action="/admin/admins/<%= a._id %>?_method=DELETE"
+                    onsubmit="return confirm('Remove <%= a.name %> as an admin?');">
+                <button class="btn btn-small btn-danger" type="submit">Delete</button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <p class="hint">Admins sign in to the panel at <code>/login</code> and to the Telegram bot with the same email and password. Once linked to Telegram they receive every request and booking, with approve and decline buttons in the chat.</p>
+</section>

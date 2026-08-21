@@ -146,3 +146,8 @@ app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`)
 // The Telegram bot runs in the same process. No token in .env means no bot,
 // and the admin panel carries on as normal.
 startBot();
+
+// Hands confirmed bookings to their booker on the booked day (runs a pass
+// now, then every 5 minutes — picks up the date change automatically).
+const { startBookingScheduler } = require('./services/bookingAutoAssign');
+startBookingScheduler();

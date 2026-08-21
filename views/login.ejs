@@ -7,7 +7,7 @@
   </div>
 
   <div class="auth-form">
-    <p class="eyebrow">Admin access</p>
+    <p class="eyebrow">Studio Inventory</p>
     <h1>Sign in</h1>
 
     <% if (error) { %>
@@ -17,7 +17,7 @@
     <form method="POST" action="/login" novalidate>
       <label class="field">
         <span>Email</span>
-        <input type="email" name="email" value="<%= email %>" placeholder="admin@office.com" required autofocus />
+        <input type="email" name="email" value="<%= email %>" placeholder="you@office.com" required autofocus />
       </label>
 
       <label class="field">
@@ -28,6 +28,6 @@
       <button class="btn btn-primary btn-block" type="submit">Sign in</button>
     </form>
 
-    <p class="hint">Credentials come from your <code>.env</code> file.</p>
+    <p class="hint">One form for everyone — admins go to the panel, staff go to the tools portal. Staff use the same email and password as the Telegram bot. <a href="/">View the shelf without signing in</a>.</p>
   </div>
 </div>

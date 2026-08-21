@@ -87,7 +87,19 @@ async function releaseProduct({ product, source = 'telegram', note, claims = tru
   product.status = product.condition === 'needs-repair' ? 'maintenance' : 'available';
   await product.save();
 
-  if (claims) await fulfillNextClaim(product);
+  // A confirmed booking for TODAY beats the next-in-line queue: the item
+  // goes straight to the booker (occupyProduct would block the claimant
+  // anyway while a confirmed booking is live). Lazy require avoids a cycle.
+  let handedToBooker = null;
+  if (claims) {
+    try {
+      const { autoAssignForProductToday } = require('./bookingAutoAssign');
+      handedToBooker = await autoAssignForProductToday(product);
+    } catch (err) {
+      console.error('Could not auto-assign returned item to booker:', err.message);
+    }
+    if (!handedToBooker) await fulfillNextClaim(product);
+  }
 
   // Bookings that were waiting for this instrument to come back now go to
   // the admins for a confirm/cancel decision (lazy require avoids a cycle)
