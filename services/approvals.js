@@ -4,6 +4,7 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const { occupyProduct } = require('./occupancy');
 const { notifyUser } = require('../bot/notify');
+const { pushNotification } = require('./notifications');
 const { escapeHtml, todayKey, formatDay } = require('../utils/format');
 const { bookingSpan } = require('./booking');
 
@@ -42,12 +43,21 @@ async function approveRequest(requestId, decidedBy) {
     request.decidedBy = decidedBy || null;
     await request.save();
 
-    if (user && user.telegramChatId) {
-      notifyUser(
-        user.telegramChatId,
-        `❌ Your request for <b>${escapeHtml(request.productName)}</b> <code>${escapeHtml(request.assetTag || '')}</code> could not be approved.\n📝 ${escapeHtml(failure)}.`
-      );
-    }
+    await pushNotification({
+      user,
+      kind: 'request-rejected',
+      title: 'Request could not be approved',
+      productName: request.productName,
+      assetTag: request.assetTag,
+      reason: request.reason,
+      note: failure,
+      decidedBy: decidedBy || null,
+      refModel: 'AssignmentRequest',
+      refId: request._id,
+      telegramText:
+        `❌ Your request for <b>${escapeHtml(request.productName)}</b> <code>${escapeHtml(request.assetTag || '')}</code> could not be approved.\n📝 ${escapeHtml(failure)}.`,
+    });
+
     return { ok: false, message: `Could not approve: ${failure}` };
   }
 
@@ -84,13 +94,22 @@ async function rejectRequest(requestId, decidedBy, note) {
   await request.save();
 
   const user = await User.findById(request.user);
-  if (user && user.telegramChatId) {
-    notifyUser(
-      user.telegramChatId,
+  await pushNotification({
+    user,
+    kind: 'request-rejected',
+    title: 'Request declined by the admin',
+    productName: request.productName,
+    assetTag: request.assetTag,
+    reason: request.reason,
+    note: cleanNote,
+    decidedBy: decidedBy || null,
+    refModel: 'AssignmentRequest',
+    refId: request._id,
+    telegramText:
       `❌ Your request for <b>${escapeHtml(request.productName)}</b> <code>${escapeHtml(request.assetTag || '')}</code> was declined by the admin.` +
-        (cleanNote ? `\n📝 ${escapeHtml(cleanNote)}` : '')
-    );
-  }
+      (cleanNote ? `\n📝 ${escapeHtml(cleanNote)}` : '') +
+      `\n\nIt is also waiting on your dashboard under <b>Updates from the admin</b>.`,
+  });
 
   return { ok: true, message: 'Request declined', request };
 }
@@ -126,12 +145,22 @@ async function approveBooking(bookingId, decidedBy) {
     booking.decidedBy = decidedBy || null;
     await booking.save();
 
-    if (user && user.telegramChatId) {
-      notifyUser(
-        user.telegramChatId,
-        `❌ Your booking for <b>${escapeHtml(booking.productName)}</b> on <b>${escapeHtml(formatDay(booking.bookedFor))}</b> could not be approved.\n📝 ${escapeHtml(failure)}.`
-      );
-    }
+    await pushNotification({
+      user,
+      kind: 'booking-declined',
+      title: 'Booking could not be approved',
+      productName: booking.productName,
+      assetTag: booking.assetTag,
+      bookedFor: booking.bookedFor,
+      reason: booking.reason,
+      note: failure,
+      decidedBy: decidedBy || null,
+      refModel: 'Booking',
+      refId: booking._id,
+      telegramText:
+        `❌ Your booking for <b>${escapeHtml(booking.productName)}</b> on <b>${escapeHtml(formatDay(booking.bookedFor))}</b> could not be approved.\n📝 ${escapeHtml(failure)}.`,
+    });
+
     return { ok: false, message: `Could not approve booking: ${failure}` };
   }
 
@@ -201,13 +230,23 @@ async function rejectBooking(bookingId, decidedBy, note) {
   await booking.save();
 
   const user = await User.findById(booking.user);
-  if (user && user.telegramChatId) {
-    notifyUser(
-      user.telegramChatId,
+  await pushNotification({
+    user,
+    kind: 'booking-declined',
+    title: 'Booking declined by the admin',
+    productName: booking.productName,
+    assetTag: booking.assetTag,
+    bookedFor: booking.bookedFor,
+    reason: booking.reason,
+    note: cleanNote,
+    decidedBy: decidedBy || null,
+    refModel: 'Booking',
+    refId: booking._id,
+    telegramText:
       `❌ Your booking for <b>${escapeHtml(booking.productName)}</b> on <b>${escapeHtml(formatDay(booking.bookedFor))}</b> was declined by the admin.` +
-        (cleanNote ? `\n📝 ${escapeHtml(cleanNote)}` : '')
-    );
-  }
+      (cleanNote ? `\n📝 ${escapeHtml(cleanNote)}` : '') +
+      `\n\nIt is also waiting on your dashboard under <b>Updates from the admin</b>.`,
+  });
 
   return { ok: true, message: 'Booking declined', booking };
 }

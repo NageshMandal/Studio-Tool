@@ -156,6 +156,22 @@ It shows:
 
 The web portal enforces exactly the same rules as the bot — same account types, same approval flow, same booking checks — because both go through the same code. Web actions appear in the usage log with `source: web`. The staff session is a separate cookie from the admin one, so both can be signed in side by side.
 
+## Rejections: dashboard + Telegram
+
+When an admin says no, the person is told twice — once in Telegram, once on their dashboard — so nothing is missed by someone who has not linked a chat, or who scrolled past the message.
+
+Three things trigger it:
+
+- A **request rejected** — the admin declined it, *or* approving it failed because the world moved on (item already taken, retired, in maintenance, person deactivated).
+- A **booking rejected** — same two cases, plus a day that has already passed or been confirmed for someone else.
+- A **confirmed booking cancelled** by the admin after the fact.
+
+Each one writes a `Notification` row and pushes the Telegram message. Both halves run from `services/notifications.js` → `pushNotification()`, which is called from `services/approvals.js` and `controllers/requestController.js`. Because the approve/decline buttons in the admins' own Telegram chats call the *same* `approvals` functions as the panel, a decision made from either side produces the identical notification.
+
+On `/staff` the unread ones sit in an **Updates from the admin** panel at the top of the dashboard, in red, with the admin's note, the day that was asked for, and what the person had originally requested. The sidebar Dashboard link carries a count badge. **Dismiss** clears one, **Clear all** clears the lot; the five most recently dismissed stay visible, greyed out, so the panel is not blank right after clearing.
+
+If the Telegram half did not land (no linked chat, bot offline), the dashboard row says so and points the person at the bot — the record is written either way. A notification failing never rolls back the admin's decision: it is saved before the person is told.
+
 ## Public shelf view (`/`)
 
 The home page is now a **public, no-login catalog**: every instrument grouped by category with its live status — available, occupied (with holder and since when), in maintenance, or retired — plus totals at the top. Handy for a wall-mounted screen in the studio. Buttons in the header lead to the staff and admin sign-ins. Viewing is all it allows; taking or booking anything requires signing in.

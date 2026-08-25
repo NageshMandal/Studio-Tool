@@ -5,6 +5,68 @@
   <div class="alert alert-error"><%= error %></div>
 <% } %>
 
+<% if (alerts.length > 0 || pastAlerts.length > 0) { %>
+  <section class="panel alerts-panel">
+    <div class="panel-head">
+      <h2>
+        Updates from the admin
+        <% if (alerts.length > 0) { %><span class="nav-badge alerts-count"><%= alerts.length %></span><% } %>
+      </h2>
+      <% if (alerts.length > 0) { %>
+        <form method="POST" action="/staff/notifications/read-all">
+          <button class="btn btn-ghost btn-small" type="submit">Clear all</button>
+        </form>
+      <% } %>
+    </div>
+
+    <table class="table">
+      <tbody>
+        <% alerts.forEach(function (n) { %>
+          <tr class="alert-row is-unread">
+            <td>
+              <span class="row-title">
+                <%= n.kind === 'booking-cancelled' ? '⚠️' : '❌' %> <%= n.productName || 'An item' %>
+                <span class="pill pill-rejected"><%= n.kind === 'request-rejected' ? 'request rejected' : (n.kind === 'booking-declined' ? 'booking rejected' : 'booking cancelled') %></span>
+              </span>
+              <span class="row-sub">
+                <span class="asset-tag"><%= n.assetTag || '—' %></span>
+                <% if (n.bookedFor) { %> · for <strong><%= formatDay(n.bookedFor) %></strong><% } %>
+                · <%= n.title %> <%= formatWhen(n.createdAt) %>
+                <% if (n.decidedBy) { %> by <%= n.decidedBy %><% } %>
+              </span>
+              <% if (n.note) { %><span class="row-sub alert-note">📝 Admin's note: <%= n.note %></span><% } %>
+              <% if (n.reason) { %><span class="row-sub">You had asked for: <%= n.reason %></span><% } %>
+              <% if (!n.sentToTelegram) { %>
+                <span class="row-sub alert-note">📵 We could not message you on Telegram — open the bot and sign in to get these instantly.</span>
+              <% } %>
+            </td>
+            <td class="right">
+              <form method="POST" action="/staff/notifications/<%= n._id %>/read">
+                <button class="btn btn-ghost btn-small" type="submit">Dismiss</button>
+              </form>
+            </td>
+          </tr>
+        <% }); %>
+
+        <% pastAlerts.forEach(function (n) { %>
+          <tr class="alert-row is-read">
+            <td>
+              <span class="row-title"><%= n.productName || 'An item' %></span>
+              <span class="row-sub">
+                <span class="asset-tag"><%= n.assetTag || '—' %></span>
+                <% if (n.bookedFor) { %> · for <%= formatDay(n.bookedFor) %><% } %>
+                · <%= n.title %> <%= formatWhen(n.createdAt) %>
+                <% if (n.note) { %> · 📝 <%= n.note %><% } %>
+              </span>
+            </td>
+            <td class="right"><span class="row-sub">dismissed</span></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </section>
+<% } %>
+
 <section class="panel">
   <div class="panel-head">
     <h2>You are holding <%= myItems.length %> item<%= myItems.length === 1 ? '' : 's' %></h2>

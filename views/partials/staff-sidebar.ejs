@@ -9,6 +9,9 @@
   <nav class="nav">
     <a class="nav-link <%= active === 'staff-dashboard' ? 'is-active' : '' %>" href="/staff">
       <span class="nav-dot"></span> Dashboard
+      <% if (typeof unreadAlertCount !== 'undefined' && unreadAlertCount > 0) { %>
+        <span class="nav-badge"><%= unreadAlertCount %></span>
+      <% } %>
     </a>
     <a class="nav-link <%= active === 'staff-inventory' ? 'is-active' : '' %>" href="/staff/inventory">
       <span class="nav-dot"></span> Inventory

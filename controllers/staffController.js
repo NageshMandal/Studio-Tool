@@ -7,6 +7,7 @@ const NextClaim = require('../models/NextClaim');
 const { occupyProduct, releaseProduct } = require('../services/occupancy');
 const { createBooking } = require('../services/booking');
 const { createClaim, releaseForClaim, keepDespiteClaim } = require('../services/claims');
+const notifications = require('../services/notifications');
 const { notifyAdmins } = require('../bot/notify');
 const { escapeHtml, todayKey, formatDay } = require('../utils/format');
 const { STAFF_COOKIE } = require('../middleware/staffAuth');
@@ -93,6 +94,9 @@ exports.portal = async (req, res, next) => {
   try {
     const user = req.staff;
 
+    // Anything the admin rejected, declined or cancelled, newest first
+    const { unread: alerts, recentlyRead: pastAlerts } = await notifications.listForStaff(user._id);
+
     const myItems = await Product.find({ assignedTo: user._id })
       .sort({ occupiedAt: 1 })
       .lean();
@@ -137,6 +141,8 @@ exports.portal = async (req, res, next) => {
       layout: 'staff/layout',
       active: 'staff-dashboard',
       user,
+      alerts,
+      pastAlerts,
       myItems,
       myRequests,
       myBookings,
@@ -333,6 +339,7 @@ exports.book = async (req, res, next) => {
     try {
       const booking = await createBooking({ product, user, dateKey, reason, pickupTime, dropDate, dropTime, source: 'web' });
       return back(
+        req,
         res,
         booking.awaitingReturn
           ? `Booking filed for ${formatDay(dateKey)} — ${booking.holderNameAtCreation || 'the holder'} has been asked to submit the item; the admin will then confirm`
@@ -395,6 +402,7 @@ exports.claim = async (req, res, next) => {
     try {
       const claim = await createClaim({ product, user, reason, source: 'web' });
       return back(
+        req,
         res,
         `You are next in line for ${product.name} — ${claim.holderName || 'the holder'} has been asked to release it`
       );
@@ -439,6 +447,26 @@ exports.keepClaim = async (req, res, next) => {
   try {
     const result = await keepDespiteClaim(req.params.id, req.staff);
     back(req, res, result.message);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /staff/notifications/:id/read — dismiss one update
+exports.dismissNotification = async (req, res, next) => {
+  try {
+    const done = await notifications.markRead(req.params.id, req.staff._id);
+    back(req, res, done ? 'Update dismissed' : 'That update is already cleared');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /staff/notifications/read-all — dismiss everything at once
+exports.dismissAllNotifications = async (req, res, next) => {
+  try {
+    const count = await notifications.markAllRead(req.staff._id);
+    back(req, res, count ? `Cleared ${count} update${count === 1 ? '' : 's'}` : 'Nothing to clear');
   } catch (err) {
     next(err);
   }

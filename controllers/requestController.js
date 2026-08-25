@@ -4,7 +4,7 @@ const NextClaim = require('../models/NextClaim');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const approvals = require('../services/approvals');
-const { notifyUser } = require('../bot/notify');
+const { pushNotification } = require('../services/notifications');
 const { escapeHtml, todayKey, formatDay } = require('../utils/format');
 
 /**
@@ -133,12 +133,22 @@ exports.cancelBooking = async (req, res, next) => {
     await booking.save();
 
     const user = await User.findById(booking.user);
-    if (user && user.telegramChatId) {
-      notifyUser(
-        user.telegramChatId,
-        `\u26a0\ufe0f Your confirmed booking for <b>${escapeHtml(booking.productName)}</b> on <b>${escapeHtml(formatDay(booking.bookedFor))}</b> was cancelled by the admin.`
-      );
-    }
+    await pushNotification({
+      user,
+      kind: 'booking-cancelled',
+      title: 'Confirmed booking cancelled by the admin',
+      productName: booking.productName,
+      assetTag: booking.assetTag,
+      bookedFor: booking.bookedFor,
+      reason: booking.reason,
+      note: booking.decisionNote,
+      decidedBy: booking.decidedBy,
+      refModel: 'Booking',
+      refId: booking._id,
+      telegramText:
+        `\u26a0\ufe0f Your confirmed booking for <b>${escapeHtml(booking.productName)}</b> on <b>${escapeHtml(formatDay(booking.bookedFor))}</b> was cancelled by the admin.` +
+        `\n\nIt is also waiting on your dashboard under <b>Updates from the admin</b>.`,
+    });
 
     res.redirect('/admin/requests?message=Booking cancelled');
   } catch (err) {
