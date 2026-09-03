@@ -28,8 +28,6 @@ if (missing.length) {
   process.exit(1);
 }
 
-connectDB();
-
 const app = express();
 
 app.set('view engine', 'ejs');
@@ -235,13 +233,39 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Studio Tracker running on http://localhost:${PORT}`));
-
-// The Telegram bot runs in the same process. No token in .env means no bot,
-// and the admin panel carries on as normal.
-startBot();
-
-// Hands confirmed bookings to their booker on the booked day
 const { startBookingScheduler } = require('./services/bookingAutoAssign');
-startBookingScheduler();
+
+/**
+ * Start the database FIRST, then everything that depends on it.
+ *
+ * Previously the connection was fired and forgotten, so the app announced
+ * "running on http://localhost:3000" and started the Telegram bot while the
+ * connection was still being attempted — and then exited a moment later when
+ * it failed. The success line printed above the error made a plain DNS
+ * problem look like a crash mid-flight.
+ *
+ * Now nothing starts until the database is actually up, so the log reads in
+ * the order things really happened.
+ */
+(async () => {
+  await connectDB();
+
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`Studio Tracker running on http://localhost:${PORT}`));
+
+  // The Telegram bot runs in the same process. No token in .env means no bot,
+  // and the admin panel carries on as normal.
+  startBot();
+
+  // Hands confirmed bookings to their booker on the booked day
+  startBookingScheduler();
+})();
+
+/**
+ * If the database drops later (laptop sleeps, wifi changes), the driver
+ * reconnects on its own. Log it rather than letting it pass silently, so a
+ * burst of slow pages has a visible cause.
+ */
+const mongoose = require('mongoose');
+mongoose.connection.on('disconnected', () => console.warn('MongoDB disconnected — retrying…'));
+mongoose.connection.on('reconnected', () => console.log('MongoDB reconnected'));

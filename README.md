@@ -8,6 +8,53 @@ Express · EJS · MongoDB · JWT · optional Telegram bot.
 
 ---
 
+## Troubleshooting the database connection
+
+```bash
+npm run check:db
+```
+
+This tests four layers separately and stops at the first that fails: the
+`.env` value, DNS, the TCP path to the cluster, then Atlas credentials. Most
+"cannot connect" errors are one specific layer, and the messages say which.
+
+### `querySrv ECONNREFUSED _mongodb._tcp.<cluster>.mongodb.net`
+
+The most common Atlas error, and the most misread. A `mongodb+srv://` URI
+makes the driver do a **DNS SRV lookup** before it talks to Atlas at all.
+This error means the resolver Node is using refused that lookup — so Atlas is
+never contacted, and it is **not** a password or IP-allow-list problem.
+
+`nslookup` succeeding does not rule this out. Node uses its own bundled
+resolver, not the one nslookup uses. A stale VPN entry, a router that refuses
+SRV queries, or a dead IPv6 DNS entry will break Node while nslookup keeps
+working.
+
+Fix it one of these ways, easiest first:
+
+1. **Point this app at public DNS.** Add to `.env` and restart:
+   ```
+   DNS_SERVERS=8.8.8.8,1.1.1.1
+   ```
+   Affects this process only; nothing else on the machine changes.
+
+2. **Skip SRV entirely.** In Atlas: *Connect → Drivers →* choose
+   **"Node.js 2.2.12 or earlier"**. That gives a plain `mongodb://` URI
+   listing all three hosts, needing no SRV record. Works on networks and VPNs
+   that block SRV queries.
+
+3. **Disconnect from any VPN or company network** and retry.
+
+### Other notes
+
+- The variable must be named `MONGO_URI` exactly — not `MONGODB_URI`.
+- Do not wrap the value in quotes.
+- If the password contains `@ : / ? # [ ] %`, percent-encode it
+  (`@` → `%40`, `#` → `%23`).
+- `DEBUG_DB=1` in `.env` prints full stack traces on connection failure.
+
+---
+
 ## The role model
 
 Everything in the system belongs to exactly one **studio**. Who can see which
@@ -130,6 +177,7 @@ into the URL, and the filtered list page would never reveal that they had.
 Four self-checks ship with the project:
 
 ```bash
+node diag-check.js      # database error diagnostics give the right advice
 node perm-check.js      # 30 assertions on the permission rules
 node render-check.js    # every page rendered for every role
 node lay-check.js       # every layout and sidebar, per role
