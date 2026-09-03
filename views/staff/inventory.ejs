@@ -1,141 +1,154 @@
-<% if (message) { %>
-  <div class="alert alert-info"><%= message %></div>
-<% } %>
-<% if (error) { %>
-  <div class="alert alert-error"><%= error %></div>
-<% } %>
+<%
+  // The same availability rules the server enforces, mirrored here so a
+  // button is never offered for something the action would refuse.
+  function blocked(p) {
+    return p.condition === 'retired' || p.status === 'maintenance' || p.condition === 'needs-repair';
+  }
+%>
 
 <section class="panel">
   <div class="panel-head">
-    <form class="filters" method="GET" action="/staff/inventory">
-      <input type="search" name="q" value="<%= query.q %>" placeholder="Search name, tag, serial…" />
+    <div>
+      <h2>Equipment at <%= user.location.name %></h2>
+      <p class="sub">
+        <% if (user.accountType === 'power') { %>
+          You can take an available item straight out
+        <% } else { %>
+          Ask for an item and your studio admin will approve it
+        <% } %>
+      </p>
+    </div>
+    <a class="btn btn-ghost btn-sm" href="/staff/purchase-requests">
+      <%- icon('cart', 15) %> Not here? Request it
+    </a>
+  </div>
+
+  <form class="filters" method="GET" action="/staff/inventory">
+    <label class="field">
+      <span>Search</span>
+      <input type="search" name="q" value="<%= query.q %>" placeholder="Name, tag or brand" />
+    </label>
+    <label class="field">
+      <span>Category</span>
       <select name="category">
         <option value="">All categories</option>
         <% categories.forEach(function (c) { %>
           <option value="<%= c %>" <%= query.category === c ? 'selected' : '' %>><%= c %></option>
         <% }); %>
       </select>
+    </label>
+    <label class="field">
+      <span>Status</span>
       <select name="status">
-        <option value="">Any status</option>
+        <option value="">All status</option>
         <% statuses.forEach(function (s) { %>
           <option value="<%= s %>" <%= query.status === s ? 'selected' : '' %>><%= s %></option>
         <% }); %>
       </select>
-      <button class="btn btn-ghost" type="submit">Filter</button>
+    </label>
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Filter</button>
       <a class="btn btn-ghost" href="/staff/inventory">Reset</a>
-    </form>
-  </div>
+    </div>
+  </form>
 </section>
 
-<% groups.forEach(function (g) { %>
-  <section class="panel">
-    <div class="panel-head"><h2><%= g.category %></h2></div>
-    <table class="table">
-      <tbody>
-        <% g.items.forEach(function (p) {
-             var retired = p.condition === 'retired';
-             var blocked = retired || p.status === 'maintenance' || p.condition === 'needs-repair';
-             var mine = p.assignedTo && String(p.assignedTo) === String(user._id);
-             var myPending = pendingByProduct[String(p._id)];
-             var bookedToday = bookedTodayByProduct[String(p._id)];
-             var takeable = !p.assignedTo && !blocked;
-        %>
-          <tr>
-            <td class="thumb-cell"><%- include('../partials/thumb', { thumbUrl: p.imageUrl, thumbName: p.name }) %></td>
-            <td>
-              <span class="row-title"><%= p.name %></span>
-              <span class="row-sub">
-                <span class="asset-tag"><%= p.assetTag %></span>
-                <% if (p.brand || p.model) { %> · <%= [p.brand, p.model].filter(Boolean).join(' ') %><% } %>
-                <% if (p.location) { %> · <%= p.location %><% } %>
-              </span>
-              <span class="row-sub">
-                <% if (retired) { %>
-                  <span class="pill pill-retired">retired</span>
-                <% } else if (blocked) { %>
-                  <span class="pill pill-maintenance">in maintenance</span>
-                <% } else if (mine) { %>
-                  <span class="pill pill-assigned">with you</span> since <%= formatWhen(p.occupiedAt) %>
-                <% } else if (p.assignedTo) { %>
-                  <span class="pill pill-assigned">occupied</span>
-                  with <%= holderMap[String(p.assignedTo)] || 'someone' %> · since <%= formatWhen(p.occupiedAt) %> (<%= formatSince(p.occupiedAt) %>)
-                  <% if (p.occupyReason) { %> · 📝 <%= p.occupyReason %><% } %>
-                <% } else { %>
-                  <span class="pill pill-available">available</span>
-                <% } %>
-                <% if (bookedToday) { %>
-                  · <span class="pill pill-power">booked today: <%= bookedToday.userName %></span>
-                <% } %>
-                <% var rowClaim = claimByProduct[String(p._id)]; %>
-                <% if (rowClaim) { %>
-                  · ⚡ next: <%= String(rowClaim.user) === String(user._id) ? 'you' : rowClaim.userName %>
-                <% } %>
-              </span>
-            </td>
-            <td class="right staff-actions">
-              <% if (mine) { %>
-                <form method="POST" action="/staff/return/<%= p._id %>">
-                  <button class="btn btn-primary btn-small" type="submit">Submit item</button>
-                </form>
-              <% } else if (myPending) { %>
-                <form method="POST" action="/staff/requests/<%= myPending._id %>/cancel">
-                  <button class="btn btn-ghost btn-small" type="submit">Cancel request</button>
-                </form>
-              <% } else if (p.assignedTo && !mine && !blocked && user.accountType === 'power') { %>
-                <% var q = claimByProduct[String(p._id)]; %>
-                <% if (q && String(q.user) === String(user._id)) { %>
-                  <form method="POST" action="/staff/claims/<%= q._id %>/cancel">
-                    <button class="btn btn-ghost btn-small" type="submit">Cancel claim</button>
-                  </form>
-                <% } else if (!q) { %>
-                  <details class="staff-drop">
-                    <summary class="btn btn-primary btn-small">⚡ Book next</summary>
-                    <form class="staff-popform" method="POST" action="/staff/claim/<%= p._id %>">
-                      <input type="text" name="reason" maxlength="120" placeholder="What is it for?" required minlength="2" />
-                      <button class="btn btn-primary btn-small" type="submit">Ask holder to release</button>
-                    </form>
-                  </details>
-                <% } %>
-              <% } else if (takeable) { %>
-                <details class="staff-drop">
-                  <summary class="btn btn-primary btn-small"><%= user.accountType === 'power' ? 'Occupy now' : 'Request item' %></summary>
-                  <form class="staff-popform" method="POST" action="/staff/occupy/<%= p._id %>">
-                    <input type="text" name="reason" maxlength="120" placeholder="What is it for?" required minlength="2" />
-                    <button class="btn btn-primary btn-small" type="submit">
-                      <%= user.accountType === 'power' ? 'Take it' : 'Send to admin' %>
-                    </button>
-                  </form>
-                </details>
-              <% } %>
-              <% if (!retired) { %>
-                <details class="staff-drop">
-                  <summary class="btn btn-ghost btn-small">Book a date</summary>
-                  <form class="staff-popform staff-popform-book" method="POST" action="/staff/book/<%= p._id %>">
-                    <label class="popform-label">Pickup
-                      <span class="popform-row">
-                        <input type="date" name="date" min="<%= todayKey %>" required />
-                        <input type="time" name="pickupTime" required />
-                      </span>
-                    </label>
-                    <label class="popform-label">Drop
-                      <span class="popform-row">
-                        <input type="date" name="dropDate" min="<%= todayKey %>" required />
-                        <input type="time" name="dropTime" required />
-                      </span>
-                    </label>
-                    <input type="text" name="reason" maxlength="120" placeholder="What is it for?" required minlength="2" />
-                    <button class="btn btn-primary btn-small" type="submit">Send booking</button>
-                  </form>
-                </details>
-              <% } %>
-            </td>
-          </tr>
-        <% }); %>
-      </tbody>
-    </table>
-  </section>
-<% }); %>
-
 <% if (groups.length === 0) { %>
-  <section class="panel"><div class="empty"><p>No items match this view.</p></div></section>
+  <div class="panel">
+    <div class="empty">
+      <h3>Nothing matches</h3>
+      <p>
+        No equipment here fits those filters. If your studio simply does not own
+        what you need, you can ask for it.
+      </p>
+      <a class="btn btn-primary" href="/staff/purchase-requests">Request an item</a>
+    </div>
+  </div>
 <% } %>
+
+<% groups.forEach(function (g) { %>
+  <p class="category-head"><%= g.category %></p>
+  <div class="item-grid">
+    <% g.items.forEach(function (p) { %>
+      <%
+        var mine = p.assignedTo && String(p.assignedTo) === String(user._id);
+        var pending = pendingByProduct[String(p._id)];
+        var claim = claimByProduct[String(p._id)];
+        var booked = bookedTodayByProduct[String(p._id)];
+      %>
+      <div class="item-card">
+        <div class="top">
+          <%- include('../partials/thumb', { thumbUrl: p.imageUrl, thumbName: p.name }) %>
+          <div style="min-width: 0">
+            <h4><%= p.name %></h4>
+            <span class="row-sub"><%= p.assetTag %> · <%= p.brand || '' %></span>
+          </div>
+        </div>
+
+        <div>
+          <% if (mine) { %>
+            <span class="badge badge-blue">With you</span>
+          <% } else if (p.assignedTo) { %>
+            <span class="badge badge-amber">With <%= holderMap[String(p.assignedTo)] || 'someone' %></span>
+          <% } else if (blocked(p)) { %>
+            <span class="badge badge-red">Unavailable</span>
+          <% } else if (booked && String(booked.user) !== String(user._id)) { %>
+            <span class="badge badge-purple">Booked today by <%= booked.userName %></span>
+          <% } else { %>
+            <span class="badge badge-green">Available</span>
+          <% } %>
+          <% if (claim) { %>
+            <span class="badge badge-grey"><%= claim.userName %> next</span>
+          <% } %>
+        </div>
+
+        <% if (mine) { %>
+          <form method="POST" action="/staff/return/<%= p._id %>">
+            <button class="btn btn-primary btn-sm btn-block" type="submit">Submit item</button>
+          </form>
+
+        <% } else if (pending) { %>
+          <form method="POST" action="/staff/requests/<%= pending._id %>/cancel">
+            <p class="hint">Waiting for the admin to decide.</p>
+            <button class="btn btn-ghost btn-sm btn-block" type="submit">Cancel my request</button>
+          </form>
+
+        <% } else if (!p.assignedTo && !blocked(p)) { %>
+          <form method="POST" action="/staff/occupy/<%= p._id %>" class="inline-form">
+            <input type="text" name="reason" placeholder="What is it for?" maxlength="120" required />
+            <button class="btn btn-primary btn-sm" type="submit">
+              <%= user.accountType === 'power' ? 'Take' : 'Ask' %>
+            </button>
+          </form>
+
+        <% } else if (p.assignedTo && user.accountType === 'power' && !claim) { %>
+          <form method="POST" action="/staff/claim/<%= p._id %>" class="inline-form">
+            <input type="text" name="reason" placeholder="Why you need it next" maxlength="120" required />
+            <button class="btn btn-ghost btn-sm" type="submit">I'm next</button>
+          </form>
+        <% } %>
+
+        <details>
+          <summary class="hint" style="cursor: pointer">Book for a date</summary>
+          <form method="POST" action="/staff/book/<%= p._id %>" style="margin-top: 9px">
+            <label class="field" style="margin-bottom: 8px">
+              <span>Pickup</span>
+              <input type="date" name="date" min="<%= todayKey %>" required />
+              <input type="time" name="pickupTime" required style="margin-top: 6px" />
+            </label>
+            <label class="field" style="margin-bottom: 8px">
+              <span>Drop off</span>
+              <input type="date" name="dropDate" min="<%= todayKey %>" required />
+              <input type="time" name="dropTime" required style="margin-top: 6px" />
+            </label>
+            <label class="field" style="margin-bottom: 8px">
+              <span>Reason</span>
+              <input type="text" name="reason" maxlength="120" required />
+            </label>
+            <button class="btn btn-ghost btn-sm btn-block" type="submit">Request booking</button>
+          </form>
+        </details>
+      </div>
+    <% }); %>
+  </div>
+<% }); %>

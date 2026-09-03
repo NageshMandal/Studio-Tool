@@ -1,4 +1,5 @@
 const NextClaim = require('../models/NextClaim');
+const { studioName } = require('./studios');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const { releaseProduct } = require('./occupancy');
@@ -46,6 +47,8 @@ async function createClaim({ product, user, reason, source = 'telegram' }) {
   const holder = await User.findById(product.assignedTo).lean();
 
   const claim = await NextClaim.create({
+    location: product.location,
+    locationName: await studioName(product.location),
     product: product._id,
     productName: product.name,
     assetTag: product.assetTag,

@@ -1,7 +1,8 @@
 const Booking = require('../models/Booking');
+const { studioName } = require('./studios');
 const User = require('../models/User');
 const { todayKey, formatDay, escapeHtml, formatWhen } = require('../utils/format');
-const { notifyUser, notifyAdmins } = require('../bot/notify');
+const { notifyUser, notifyLocationAdmins } = require('../bot/notify');
 
 /**
  * One place that files a booking, used by the Telegram bot and the staff
@@ -111,6 +112,8 @@ async function createBooking({ product, user, dateKey, reason, pickupTime, dropD
   const heldByOther = !!(product.assignedTo && String(product.assignedTo) !== String(user._id));
 
   const booking = await Booking.create({
+    location: product.location,
+    locationName: await studioName(product.location),
     product: product._id,
     productName: product.name,
     assetTag: product.assetTag,
@@ -154,9 +157,14 @@ async function createBooking({ product, user, dateKey, reason, pickupTime, dropD
   return out;
 }
 
-// The Telegram card every admin gets, with one-tap decision buttons
+/**
+ * The Telegram card the admins get, with one-tap decision buttons.
+ * Scoped to the booking's own studio: a Patna booking is Patna's decision,
+ * and nobody else's phone should light up for it.
+ */
 function notifyAdminsAboutBooking(booking, itemJustReturned = false) {
-  notifyAdmins(
+  notifyLocationAdmins(
+    booking.location,
     `📅 <b>${escapeHtml(booking.userName)}</b> wants to book ` +
       `<b>${escapeHtml(booking.productName)}</b> <code>${escapeHtml(booking.assetTag || '')}</code> ` +
       `for <b>${escapeHtml(bookingSpan(booking))}</b>.\n` +

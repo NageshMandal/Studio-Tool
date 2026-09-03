@@ -1,0 +1,193 @@
+<%
+  var statusClass = {
+    pending: 'badge-amber', approved: 'badge-blue', ordered: 'badge-purple',
+    received: 'badge-green', rejected: 'badge-red', cancelled: 'badge-grey'
+  };
+%>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr); gap: 20px; align-items: start">
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Ask for an item we don't have</h2>
+        <p class="sub">This goes to your <%= user.location.name %> admin</p>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <form method="POST" action="/staff/purchase-requests" novalidate>
+        <div class="form-grid">
+          <label class="field full">
+            <span>What do you need?</span>
+            <input type="text" name="itemName" required autofocus
+                   placeholder="e.g. Sennheiser MKE 600 shotgun mic" />
+          </label>
+
+          <label class="field">
+            <span>Category</span>
+            <select name="category">
+              <% categories.forEach(function (c) { %>
+                <option value="<%= c %>" <%= c === 'Other' ? 'selected' : '' %>><%= c %></option>
+              <% }); %>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>How many?</span>
+            <input type="number" name="quantity" value="1" min="1" />
+          </label>
+
+          <label class="field full">
+            <span>Why is it needed?</span>
+            <textarea name="reason" rows="4" required
+                      placeholder="What can't you do without it? Which shoots or clients does it affect?"></textarea>
+            <span class="help">
+              This is the part your admin actually decides on — a sentence or two
+              about the work it unblocks helps far more than just the item name.
+            </span>
+          </label>
+
+          <label class="field full">
+            <span>Where can it be bought? <span class="hint">(optional)</span></span>
+            <div class="input-icon">
+              <span class="ico"><%- icon('link', 17) %></span>
+              <input type="text" name="purchaseUrl" placeholder="Paste a product link" />
+            </div>
+          </label>
+
+          <label class="field">
+            <span>Rough price each <span class="hint">(optional)</span></span>
+            <input type="number" name="estimatedPrice" min="0" step="0.01" placeholder="0.00" />
+          </label>
+
+          <label class="field">
+            <span>How urgent?</span>
+            <select name="urgency">
+              <% urgencies.forEach(function (u) { %>
+                <option value="<%= u %>" <%= u === 'normal' ? 'selected' : '' %>>
+                  <%= u.charAt(0).toUpperCase() + u.slice(1) %>
+                </option>
+              <% }); %>
+            </select>
+          </label>
+
+          <label class="field full">
+            <span>Needed by <span class="hint">(optional)</span></span>
+            <input type="date" name="neededBy" min="<%= today %>" />
+          </label>
+        </div>
+
+        <p class="section-title" style="margin-top: 12px">
+          Anything else your admin should know
+        </p>
+        <p class="hint" style="margin-bottom: 12px">
+          Add your own labelled details — a lens mount, a client name, a room
+          number. Blank rows are ignored.
+        </p>
+
+        <div id="extraFields">
+          <div class="extra-row">
+            <input type="text" name="extraLabel" placeholder="Label, e.g. Lens mount" maxlength="60" />
+            <input type="text" name="extraValue" placeholder="Value, e.g. Canon RF" maxlength="300" />
+            <button type="button" class="btn btn-ghost btn-sm js-remove-row">Remove</button>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-ghost btn-sm" id="addExtraField">
+          <%- icon('plus', 14) %> Add another detail
+        </button>
+
+        <div class="form-actions" style="margin-top: 20px">
+          <button class="btn btn-primary" type="submit">Send to my studio admin</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <div>
+    <div class="alert alert-info">
+      <b>Who sees this.</b> Only the admins of <%= user.location.name %>. Purchase
+      requests are private to your own studio — no other branch and no head-office
+      account can read them.
+    </div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Your requests</h2>
+          <p class="sub"><%= requests.length %> so far</p>
+        </div>
+      </div>
+
+      <div class="panel-body">
+        <% if (requests.length === 0) { %>
+          <div class="empty">
+            <p>You haven't asked for anything yet.</p>
+          </div>
+        <% } else { %>
+          <% requests.forEach(function (r) { %>
+            <div class="request-card">
+              <div class="request-head">
+                <div>
+                  <h3><%= r.itemName %><% if (r.quantity > 1) { %> × <%= r.quantity %><% } %></h3>
+                  <div class="request-meta">
+                    <span class="asset-tag"><%= r.reference %></span>
+                    <span><%= formatWhen(r.createdAt) %></span>
+                  </div>
+                </div>
+                <span class="badge <%= statusClass[r.status] || 'badge-grey' %>">
+                  <%= statusLabels[r.status] %>
+                </span>
+              </div>
+
+              <% if (r.decisionNote) { %>
+                <p class="request-body">
+                  <b>Admin:</b> <%= r.decisionNote %>
+                </p>
+              <% } %>
+
+              <% if (r.status === 'pending') { %>
+                <div class="request-actions">
+                  <form method="POST" action="/staff/purchase-requests/<%= r._id %>/cancel"
+                        onsubmit="return confirm('Withdraw this request?')">
+                    <button class="btn btn-ghost btn-sm" type="submit">Withdraw</button>
+                  </form>
+                </div>
+              <% } %>
+            </div>
+          <% }); %>
+        <% } %>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  /**
+   * The extra-detail rows. They are plain parallel inputs of the same name,
+   * so the server receives two arrays and pairs them by index — no JSON in a
+   * hidden field, and the form still degrades to a single usable row if this
+   * script never runs.
+   */
+  (function () {
+    var wrap = document.getElementById('extraFields');
+    var addBtn = document.getElementById('addExtraField');
+    if (!wrap || !addBtn) return;
+
+    addBtn.addEventListener('click', function () {
+      if (wrap.children.length >= 8) return;
+      var row = wrap.children[0].cloneNode(true);
+      row.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+      wrap.appendChild(row);
+    });
+
+    wrap.addEventListener('click', function (e) {
+      var btn = e.target.closest('.js-remove-row');
+      if (!btn) return;
+      // Always leave one row, so the section never disappears entirely
+      if (wrap.children.length > 1) btn.closest('.extra-row').remove();
+      else btn.closest('.extra-row').querySelectorAll('input').forEach(function (i) { i.value = ''; });
+    });
+  })();
+</script>

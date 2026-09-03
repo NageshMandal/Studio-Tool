@@ -1,0 +1,67 @@
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px">
+  <section class="panel">
+    <div class="panel-head"><h2>Your account</h2></div>
+    <div class="panel-body">
+      <div class="detail-list" style="grid-template-columns: 1fr">
+        <div><span>Name</span><b><%= admin.name %></b></div>
+        <div><span>Email</span><b><%= admin.email %></b></div>
+        <div>
+          <span>Role</span>
+          <b>
+            <% if (can.isSuper) { %>
+              <span class="role-pill role-super">Super admin</span>
+            <% } else if (can.isLocationAdmin) { %>
+              <span class="role-pill role-admin">Location admin</span>
+            <% } else { %>
+              <span class="role-pill role-manager">Location manager</span>
+            <% } %>
+          </b>
+        </div>
+        <div><span>Studio</span><b><%= studio ? studio.name : 'All studios' %></b></div>
+      </div>
+      <% if (admin.isRoot) { %>
+        <div class="alert alert-info" style="margin: 18px 0 0">
+          This is the root account from the server's <code>.env</code> file. Its
+          name, email and password are changed there, not here.
+        </div>
+      <% } %>
+    </div>
+  </section>
+
+  <% if (studio) { %>
+    <section class="panel">
+      <div class="panel-head">
+        <h2><%= studio.name %></h2>
+        <% if (can.manageStudios) { %>
+          <a class="btn btn-ghost btn-sm" href="/admin/studios/<%= studio._id %>/edit">Edit</a>
+        <% } %>
+      </div>
+      <div class="panel-body">
+        <div class="detail-list" style="grid-template-columns: 1fr">
+          <div><span>Code</span><b><%= studio.code %> — asset tags start <%= studio.code %>-0001</b></div>
+          <div><span>City</span><b><%= studio.city || '—' %></b></div>
+          <div><span>Address</span><b><%= studio.address || '—' %></b></div>
+          <div><span>Phone</span><b><%= studio.phone || '—' %></b></div>
+        </div>
+      </div>
+    </section>
+  <% } %>
+
+  <section class="panel">
+    <div class="panel-head"><h2>What you can do</h2></div>
+    <div class="panel-body">
+      <table class="table" style="font-size: 13.5px">
+        <tbody>
+          <tr><td>Open every studio</td><td><%- can.viewAllStudios ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-grey">No</span>' %></td></tr>
+          <tr><td>Create and archive studios</td><td><%- can.manageStudios ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-grey">No</span>' %></td></tr>
+          <tr><td>Manage admin accounts</td><td><%- can.manageAdmins ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-grey">No</span>' %></td></tr>
+          <tr><td>Add and edit items</td><td><span class="badge badge-green">Yes</span></td></tr>
+          <tr><td>Delete items and people</td><td><%- can.deleteItems ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-grey">No</span>' %></td></tr>
+          <tr><td>See staff purchase requests</td><td><%- can.viewProcurement ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-grey">No — studio-private</span>' %></td></tr>
+          <tr><td>Approve purchase requests</td><td><%- can.decideProcurement ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-grey">No</span>' %></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>

@@ -1,152 +1,232 @@
 const jwt = require('jsonwebtoken');
 const Admin = require('../models/Admin');
 const User = require('../models/User');
+const Location = require('../models/Location');
 const { STAFF_COOKIE } = require('../middleware/staffAuth');
+const { ACTIVE_COOKIE, cookieOptions: scopeCookieOptions } = require('../middleware/scope');
+const { ROOT_ID } = require('../middleware/auth');
 
 /**
- * ONE sign-in form for everyone, at /login.
+ * One sign-in form for everyone, at /login.
  *
- * The submitted email + password is tried against every kind of account,
- * in this order:
- *  1. the root admin from `.env` (ADMIN_EMAIL / ADMIN_PASSWORD);
- *  2. any active admin account created on the Admins page;
- *  3. any active staff account from the People page (same credentials as
- *     the Telegram bot).
+ * The form carries a role selector, as in the design. It is a genuine
+ * choice, not decoration: picking "Administrator" checks the credentials
+ * against admin accounts only, and picking "Staff" checks them against
+ * staff accounts only. That keeps the error message honest — someone typing
+ * a staff password into the admin side is told the combination is not an
+ * admin account, rather than being silently logged in somewhere unexpected.
  *
- * Admins land on /admin/dashboard, staff land on /staff. The two sessions
- * still use separate cookies, so the right pages stay protected.
+ * Leaving it on "Auto detect" tries admin first, then staff, which is what
+ * most people want.
+ *
+ * Where they land afterwards depends on the role:
+ *   super admin      → the studio selector ("Select Your Studio")
+ *   location admin   → straight into their own studio's dashboard
+ *   location manager → the same
+ *   staff            → the staff portal
  */
 
-const signToken = (admin) =>
+const ROLE_CHOICES = [
+  { value: '', label: 'Auto detect' },
+  { value: 'admin', label: 'Administrator' },
+  { value: 'staff', label: 'Staff member' },
+];
+
+const signAdminToken = (identity) =>
   jwt.sign(
     {
-      id: admin.id,
+      id: identity.id,
       role: 'admin',
-      name: admin.name,
-      email: admin.email,
+      adminRole: identity.adminRole,
+      location: identity.location,
+      name: identity.name,
+      email: identity.email,
     },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '1d' }
   );
 
-const cookieOptions = () => ({
+const adminCookieOptions = (remember) => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict',
-  maxAge: Number(process.env.COOKIE_EXPIRES_DAYS || 1) * 24 * 60 * 60 * 1000,
+  sameSite: 'lax',
+  maxAge:
+    (remember ? 30 : Number(process.env.COOKIE_EXPIRES_DAYS || 1)) * 24 * 60 * 60 * 1000,
 });
 
 const signStaffToken = (user) =>
-  jwt.sign({ id: user._id, role: 'staff' }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  jwt.sign({ id: user._id, role: 'staff', location: String(user.location) }, process.env.JWT_SECRET, {
+    expiresIn: '7d',
+  });
 
-const staffCookieOptions = () => ({
+const staffCookieOptions = (remember) => ({
   httpOnly: true,
   sameSite: 'lax',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
+  maxAge: (remember ? 30 : 7) * 24 * 60 * 60 * 1000,
 });
 
 /**
  * Resolve the submitted credentials to an admin identity, or null.
- * Checks the `.env` root admin first, then the Admin collection.
+ * The root admin from `.env` is checked first and is always a super admin.
  */
 async function resolveAdmin(email = '', password = '') {
   const cleanEmail = String(email).trim().toLowerCase();
 
   if (
-    cleanEmail === String(process.env.ADMIN_EMAIL).toLowerCase() &&
+    cleanEmail === String(process.env.ADMIN_EMAIL || '').toLowerCase() &&
     password === process.env.ADMIN_PASSWORD
   ) {
-    return { id: 'admin', name: process.env.ADMIN_NAME || 'Admin', email: process.env.ADMIN_EMAIL };
+    return {
+      id: ROOT_ID,
+      name: process.env.ADMIN_NAME || 'Studio Admin',
+      email: String(process.env.ADMIN_EMAIL).toLowerCase(),
+      adminRole: 'super',
+      location: null,
+      isRoot: true,
+    };
   }
 
   const admin = await Admin.findOne({ email: cleanEmail, status: 'active' }).select('+password');
-  if (admin && (await admin.matchPassword(password))) {
-    return { id: String(admin._id), name: admin.name, email: admin.email };
+  if (!admin || !(await admin.matchPassword(password))) return null;
+
+  // A location admin whose studio has been archived cannot sign in — there
+  // is nothing for them to open, and a blank dashboard explains nothing.
+  if (admin.role !== 'super') {
+    const studio = await Location.findById(admin.location).lean();
+    if (!studio || studio.status !== 'active') {
+      return { blocked: 'Your studio is not active. Contact the super admin.' };
+    }
   }
 
-  return null;
+  admin.lastLoginAt = new Date();
+  await admin.save({ validateBeforeSave: false });
+
+  return {
+    id: String(admin._id),
+    name: admin.name,
+    email: admin.email,
+    adminRole: admin.role,
+    location: admin.location ? String(admin.location) : null,
+    isRoot: false,
+  };
 }
 
 /** Resolve the credentials to an active staff account, or null. */
 async function resolveStaff(email = '', password = '') {
-  const user = await User.findOne({ email: String(email).trim().toLowerCase() }).select('+password');
+  const user = await User.findOne({ email: String(email).trim().toLowerCase() })
+    .select('+password')
+    .populate('location', 'name status');
   if (!user || user.status !== 'active') return null;
   if (!(await user.matchPassword(password || ''))) return null;
+  if (!user.location || user.location.status !== 'active') {
+    return { blocked: 'Your studio is not active. Contact your studio admin.' };
+  }
   return user;
 }
 
-// GET /login
-exports.loginPage = (req, res) => {
-  res.render('login', {
+// Where an admin goes after signing in
+const adminLanding = (identity) =>
+  identity.adminRole === 'super' ? '/admin/studios' : '/admin/dashboard';
+
+const renderLogin = (res, status, { error, email, role }) =>
+  res.status(status).render('login', {
     title: 'Sign in',
     layout: 'auth-layout',
-    error: req.query.error || null,
-    email: '',
+    error: error || null,
+    email: email || '',
+    role: role || '',
+    roles: ROLE_CHOICES,
   });
+
+// GET /login
+exports.loginPage = (req, res) => {
+  renderLogin(res, 200, { error: req.query.error, email: '', role: req.query.role });
 };
 
-// POST /login  (renders a page)
+// POST /login
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
+    const remember = Boolean(req.body.remember);
 
     if (!email || !password) {
-      return res.status(400).render('login', {
-        title: 'Sign in',
-        layout: 'auth-layout',
-        error: 'Enter both email and password',
-        email: email || '',
-      });
+      return renderLogin(res, 400, { error: 'Enter both email and password', email, role });
     }
 
-    // Admin accounts first…
-    const admin = await resolveAdmin(email, password);
-    if (admin) {
-      res.cookie('token', signToken(admin), cookieOptions());
-      return res.redirect('/admin/dashboard');
+    const wantsAdmin = role !== 'staff';
+    const wantsStaff = role !== 'admin';
+
+    if (wantsAdmin) {
+      const admin = await resolveAdmin(email, password);
+      if (admin && admin.blocked) {
+        return renderLogin(res, 403, { error: admin.blocked, email, role });
+      }
+      if (admin) {
+        res.cookie('token', signAdminToken(admin), adminCookieOptions(remember));
+        // A fresh sign-in should never inherit the last session's studio
+        res.clearCookie(ACTIVE_COOKIE);
+        if (admin.adminRole !== 'super') {
+          res.cookie(ACTIVE_COOKIE, admin.location, scopeCookieOptions());
+        }
+        return res.redirect(adminLanding(admin));
+      }
     }
 
-    // …then staff accounts, with the same credentials as the Telegram bot
-    const staff = await resolveStaff(email, password);
-    if (staff) {
-      res.cookie(STAFF_COOKIE, signStaffToken(staff), staffCookieOptions());
-      return res.redirect('/staff');
+    if (wantsStaff) {
+      const staff = await resolveStaff(email, password);
+      if (staff && staff.blocked) {
+        return renderLogin(res, 403, { error: staff.blocked, email, role });
+      }
+      if (staff) {
+        res.cookie(STAFF_COOKIE, signStaffToken(staff), staffCookieOptions(remember));
+        return res.redirect('/staff');
+      }
     }
 
-    return res.status(401).render('login', {
-      title: 'Sign in',
-      layout: 'auth-layout',
-      error: 'That email and password combination is not recognised',
-      email,
-    });
+    const message =
+      role === 'admin'
+        ? 'That email and password is not an active administrator account'
+        : role === 'staff'
+        ? 'That email and password is not an active staff account'
+        : 'That email and password combination is not recognised';
+
+    return renderLogin(res, 401, { error: message, email, role });
   } catch (err) {
     next(err);
   }
 };
 
-// POST /api/auth/login  (returns a token — admin only, used by the API)
+// POST /api/auth/login — returns a token (admins only)
 exports.apiLogin = async (req, res, next) => {
   try {
     const { email, password } = req.body;
     const admin = await resolveAdmin(email, password);
-    if (!admin) {
+    if (!admin || admin.blocked) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
-    const token = signToken(admin);
-    res.cookie('token', token, cookieOptions());
+    const token = signAdminToken(admin);
+    res.cookie('token', token, adminCookieOptions(false));
     res.json({
       success: true,
       token,
-      admin: { name: admin.name, email: admin.email, role: 'admin' },
+      admin: {
+        name: admin.name,
+        email: admin.email,
+        role: admin.adminRole,
+        location: admin.location,
+      },
     });
   } catch (err) {
     next(err);
   }
 };
 
-// GET /logout — clears both sessions, whichever one was in use
+// GET /logout — clears every session, whichever one was in use
 exports.logout = (req, res) => {
   res.clearCookie('token');
   res.clearCookie(STAFF_COOKIE);
+  res.clearCookie(ACTIVE_COOKIE);
   res.redirect('/login?error=You have been signed out');
 };
+
+exports.ROLE_CHOICES = ROLE_CHOICES;

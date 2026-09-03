@@ -1,0 +1,200 @@
+<%
+  var statusClass = {
+    pending: 'badge-amber', approved: 'badge-blue', ordered: 'badge-purple',
+    received: 'badge-green', rejected: 'badge-red', cancelled: 'badge-grey'
+  }[request.status] || 'badge-grey';
+%>
+
+<div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 20px; align-items: start">
+
+  <div>
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2><%= request.itemName %><% if (request.quantity > 1) { %> × <%= request.quantity %><% } %></h2>
+          <p class="sub"><%= request.reference %> · raised <%= formatWhen(request.createdAt) %></p>
+        </div>
+        <span class="badge <%= statusClass %>"><%= statusLabels[request.status] %></span>
+      </div>
+
+      <div class="panel-body">
+        <p class="section-title">Why it is needed</p>
+        <p style="font-size: 14.5px; margin-bottom: 20px"><%= request.reason %></p>
+
+        <div class="request-fields">
+          <div>
+            <span>Quantity</span>
+            <b><%= request.quantity %></b>
+          </div>
+          <div>
+            <span>Category</span>
+            <b><%= request.category || 'Other' %></b>
+          </div>
+          <div>
+            <span>Urgency</span>
+            <b style="text-transform: capitalize"><%= request.urgency %></b>
+          </div>
+          <div>
+            <span>Estimated price</span>
+            <b><%= request.estimatedPrice ? formatMoney(request.estimatedPrice) : 'Not given' %></b>
+          </div>
+          <% if (request.neededBy) { %>
+            <div><span>Needed by</span><b><%= formatDay(request.neededBy) %></b></div>
+          <% } %>
+          <% if (request.purchaseUrl) { %>
+            <div>
+              <span>Where to buy</span>
+              <b><a href="<%= request.purchaseUrl %>" target="_blank" rel="noopener noreferrer"
+                    style="color: var(--blue)">Open the link <%- icon('link', 12) %></a></b>
+            </div>
+          <% } %>
+        </div>
+
+        <% if (request.extraFields && request.extraFields.length) { %>
+          <p class="section-title" style="margin-top: 22px">Additional details</p>
+          <div class="request-fields">
+            <% request.extraFields.forEach(function (f) { %>
+              <div><span><%= f.label %></span><b><%= f.value %></b></div>
+            <% }); %>
+          </div>
+        <% } %>
+      </div>
+    </section>
+
+    <% if (request.decidedAt) { %>
+      <section class="panel">
+        <div class="panel-head"><h2>Decision</h2></div>
+        <div class="panel-body">
+          <div class="detail-list">
+            <div><span>Decided by</span><b><%= request.decidedBy || '—' %></b></div>
+            <div><span>When</span><b><%= formatWhen(request.decidedAt) %></b></div>
+            <% if (request.approvedBudget) { %>
+              <div><span>Approved budget</span><b><%= formatMoney(request.approvedBudget) %></b></div>
+            <% } %>
+            <% if (request.orderedAt) { %>
+              <div><span>Ordered</span><b><%= formatWhen(request.orderedAt) %></b></div>
+            <% } %>
+            <% if (request.receivedAt) { %>
+              <div><span>Received</span><b><%= formatWhen(request.receivedAt) %></b></div>
+            <% } %>
+          </div>
+          <% if (request.decisionNote) { %>
+            <p class="section-title" style="margin-top: 18px">Note</p>
+            <p><%= request.decisionNote %></p>
+          <% } %>
+        </div>
+      </section>
+    <% } %>
+  </div>
+
+  <div>
+    <section class="panel">
+      <div class="panel-head"><h2>Requested by</h2></div>
+      <div class="panel-body">
+        <% if (requester) { %>
+          <div class="person" style="margin-bottom: 14px">
+            <span class="avatar" style="width: 40px; height: 40px; font-size: 15px">
+              <%= requester.name.trim().charAt(0).toUpperCase() %>
+            </span>
+            <div>
+              <span class="row-title"><%= requester.name %></span>
+              <span class="row-sub"><%= requester.designation || requester.department %></span>
+            </div>
+          </div>
+          <% if (requester.staffRole === 'sales') { %>
+            <p style="margin-bottom: 12px"><span class="role-pill role-sales">Sales team</span></p>
+          <% } %>
+          <div class="detail-list" style="grid-template-columns: 1fr">
+            <div><span>Email</span><b style="font-size: 13px"><%= requester.email %></b></div>
+            <% if (requester.phone) { %><div><span>Phone</span><b style="font-size: 13px"><%= requester.phone %></b></div><% } %>
+            <div><span>Department</span><b style="font-size: 13px"><%= requester.department %></b></div>
+          </div>
+        <% } else { %>
+          <p class="hint">
+            <%= request.requesterName %> — this account has since been removed from
+            the register.
+          </p>
+        <% } %>
+      </div>
+    </section>
+
+    <% if (can.decideProcurement) { %>
+      <section class="panel">
+        <div class="panel-head"><h2>Your decision</h2></div>
+        <div class="panel-body">
+
+          <% if (request.status === 'pending') { %>
+            <form method="POST" action="/admin/purchase-requests/<%= request._id %>/decide">
+              <input type="hidden" name="action" value="approve" />
+              <label class="field">
+                <span>Approved budget (optional)</span>
+                <input type="number" name="budget" min="0" step="0.01"
+                       value="<%= request.estimatedPrice || '' %>" placeholder="Per unit" />
+              </label>
+              <label class="field">
+                <span>Note to <%= request.requesterName.split(' ')[0] %> (optional)</span>
+                <textarea name="note" rows="2" placeholder="Anything they should know"></textarea>
+              </label>
+              <button class="btn btn-ok btn-block" type="submit"><%- icon('check', 15) %> Approve</button>
+            </form>
+
+            <form method="POST" action="/admin/purchase-requests/<%= request._id %>/decide"
+                  style="margin-top: 10px"
+                  onsubmit="var n = prompt('Why is this being rejected? (optional)'); if (n === null) return false; this.note.value = n; return true;">
+              <input type="hidden" name="action" value="reject" />
+              <input type="hidden" name="note" />
+              <button class="btn btn-danger btn-block" type="submit">Reject</button>
+            </form>
+
+          <% } else if (request.status === 'approved') { %>
+            <p class="hint" style="margin-bottom: 14px">Approved. Mark it ordered once the purchase is placed.</p>
+            <form method="POST" action="/admin/purchase-requests/<%= request._id %>/decide">
+              <input type="hidden" name="action" value="order" />
+              <button class="btn btn-primary btn-block" type="submit"><%- icon('cart', 15) %> Mark as ordered</button>
+            </form>
+            <form method="POST" action="/admin/purchase-requests/<%= request._id %>/decide" style="margin-top: 10px">
+              <input type="hidden" name="action" value="receive" />
+              <button class="btn btn-ok btn-block" type="submit">Mark as received</button>
+            </form>
+
+          <% } else if (request.status === 'ordered') { %>
+            <p class="hint" style="margin-bottom: 14px">On its way. Mark it received when it arrives.</p>
+            <form method="POST" action="/admin/purchase-requests/<%= request._id %>/decide">
+              <input type="hidden" name="action" value="receive" />
+              <button class="btn btn-ok btn-block" type="submit"><%- icon('box', 15) %> Mark as received</button>
+            </form>
+
+          <% } else if (request.status === 'received') { %>
+            <% if (request.linkedProduct) { %>
+              <div class="alert alert-success" style="margin: 0">
+                Already on the register.
+                <a href="/admin/products/<%= request.linkedProduct %>/edit"
+                   style="text-decoration: underline; font-weight: 600">Open the item</a>
+              </div>
+            <% } else { %>
+              <p class="hint" style="margin-bottom: 14px">
+                The last step: put it on the register so it gets an asset tag and
+                staff can book it.
+              </p>
+              <form method="POST" action="/admin/purchase-requests/<%= request._id %>/add-to-register">
+                <button class="btn btn-primary btn-block" type="submit">
+                  <%- icon('plus', 15) %> Add to the item register
+                </button>
+              </form>
+            <% } %>
+
+          <% } else { %>
+            <p class="hint">This request is closed — no further action is possible.</p>
+          <% } %>
+        </div>
+      </section>
+    <% } else { %>
+      <div class="alert alert-info">
+        Location managers can follow a purchase request, but only the location
+        admin approves one.
+      </div>
+    <% } %>
+
+    <a class="btn btn-ghost btn-block" href="/admin/purchase-requests">Back to all requests</a>
+  </div>
+</div>

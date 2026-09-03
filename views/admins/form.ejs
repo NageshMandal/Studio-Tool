@@ -1,36 +1,96 @@
-<section class="panel panel-form">
+
+<section class="panel" style="max-width: 720px">
   <div class="panel-head">
-    <h2>New admin</h2>
-    <a class="btn btn-ghost" href="/admin/admins">Back to list</a>
+    <div>
+      <h2>Add an admin</h2>
+      <p class="sub">
+        <% if (can.isSuper) { %>
+          You can appoint a super admin, or a location admin for any studio
+        <% } else { %>
+          You can add location managers to your own studio
+        <% } %>
+      </p>
+    </div>
   </div>
 
-  <% if (error) { %>
-    <div class="alert alert-error"><%= error %></div>
-  <% } %>
+  <div class="panel-body">
+    <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
 
-  <form method="POST" action="/admin/admins">
-    <div class="grid-2">
-      <label class="field">
-        <span>Full name</span>
-        <input type="text" name="name" value="<%= admin.name || '' %>" placeholder="Priya Sharma" required />
-      </label>
+    <form method="POST" action="/admin/admins" novalidate>
+      <div class="form-grid">
+        <label class="field">
+          <span>Full name</span>
+          <input type="text" name="name" value="<%= account.name || '' %>" required autofocus />
+        </label>
 
-      <label class="field">
-        <span>Email</span>
-        <input type="email" name="email" value="<%= admin.email || '' %>" placeholder="priya@office.com" required />
-      </label>
+        <label class="field">
+          <span>Email</span>
+          <input type="email" name="email" value="<%= account.email || '' %>" placeholder="name@office.com" required />
+        </label>
 
-      <label class="field">
-        <span>Password</span>
-        <input type="password" name="password" minlength="6" placeholder="At least 6 characters" required />
-      </label>
-    </div>
+        <label class="field">
+          <span>Password</span>
+          <input type="password" name="password" minlength="6" required />
+          <span class="help">At least 6 characters. They can change it later.</span>
+        </label>
 
-    <div class="form-actions">
-      <button class="btn btn-primary" type="submit">Add admin</button>
-      <a class="btn btn-ghost" href="/admin/admins">Cancel</a>
-    </div>
-  </form>
+        <label class="field">
+          <span>Phone</span>
+          <input type="text" name="phone" value="<%= account.phone || '' %>" />
+        </label>
 
-  <p class="hint">The new admin can immediately sign in to this panel and to the Telegram bot with these credentials. In the bot they will get every request and booking notification with approve/decline buttons.</p>
+        <label class="field">
+          <span>Role</span>
+          <select name="role" id="roleSelect" required>
+            <% roles.forEach(function (r) { %>
+              <option value="<%= r %>" <%= account.role === r ? 'selected' : '' %>><%= roleLabels[r] %></option>
+            <% }); %>
+          </select>
+        </label>
+
+        <label class="field" id="studioField">
+          <span>Studio</span>
+          <% if (lockedLocation) { %>
+            <input type="text" value="<%= studios[0] ? studios[0].name : '' %>" disabled />
+            <input type="hidden" name="location" value="<%= lockedLocation %>" />
+            <span class="help">Managers you add always belong to your own studio.</span>
+          <% } else { %>
+            <select name="location">
+              <option value="">Select a studio…</option>
+              <% studios.forEach(function (s) { %>
+                <option value="<%= s._id %>" <%= String(account.location) === String(s._id) ? 'selected' : '' %>>
+                  <%= s.name %> (<%= s.code %>)
+                </option>
+              <% }); %>
+            </select>
+            <span class="help">Not needed for a super admin, who works across all studios.</span>
+          <% } %>
+        </label>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Create account</button>
+        <a class="btn btn-ghost" href="/admin/admins">Cancel</a>
+      </div>
+    </form>
+  </div>
 </section>
+
+<div class="alert alert-info" style="max-width: 720px">
+  <b>One location admin per studio.</b> That keeps a single person clearly
+  accountable for the studio's approvals and its budget. Extra help should be
+  added as a <b>location manager</b> instead.
+</div>
+
+<script>
+  // A super admin has no studio, so the field is hidden rather than left
+  // filled in with something that would be silently discarded on save.
+  (function () {
+    var role = document.getElementById('roleSelect');
+    var field = document.getElementById('studioField');
+    if (!role || !field) return;
+    function sync() { field.style.display = role.value === 'super' ? 'none' : ''; }
+    role.addEventListener('change', sync);
+    sync();
+  })();
+</script>

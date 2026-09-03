@@ -2,9 +2,13 @@
  * A tiny bridge between the web app and the Telegram bot.
  *
  * The bot instance is registered once at startup. Any controller or service
- * can then push messages: notifyUser() for one chat, notifyAdmins() for every
- * signed-in admin at once (new requests, new bookings), optionally with
- * inline approve/decline buttons.
+ * can then push messages: notifyUser() for one chat, and — the important one
+ * in a multi-studio setup — notifyLocationAdmins() for the admins of ONE
+ * studio.
+ *
+ * Broadcasting to every admin everywhere would mean the Kolkata admin's
+ * phone buzzing for a Patna camera, so the studio-scoped version is the
+ * default and notifyAllAdmins() is reserved for genuinely global news.
  *
  * Everything here fails quietly: no bot running, no linked chat, or a
  * Telegram error must never break a web action.
@@ -40,34 +44,97 @@ async function notifyUser(chatId, text, keyboard = null) {
   }
 }
 
-/**
- * Broadcast to every admin who can hear it: each active admin account linked
- * to a Telegram chat, plus the optional ADMIN_TELEGRAM_CHAT_ID from `.env`
- * (the root admin's own chat). Duplicates are collapsed.
- */
-async function notifyAdmins(text, keyboard = null) {
-  if (!botInstance) return 0;
-
-  // Required lazily to avoid a cycle at module load time
-  const Admin = require('../models/Admin');
-
-  const chatIds = new Set();
-  if (process.env.ADMIN_TELEGRAM_CHAT_ID) chatIds.add(String(process.env.ADMIN_TELEGRAM_CHAT_ID));
-  try {
-    const admins = await Admin.find(
-      { status: 'active', telegramChatId: { $ne: null } },
-      'telegramChatId'
-    ).lean();
-    admins.forEach((a) => chatIds.add(String(a.telegramChatId)));
-  } catch (err) {
-    console.error('Could not load admin chat list:', err.message);
-  }
-
+/** Send the same message to a set of chat ids, collapsing duplicates. */
+async function fanOut(chatIds, text, keyboard) {
   let sent = 0;
-  for (const chatId of chatIds) {
+  for (const chatId of new Set(chatIds.filter(Boolean).map(String))) {
     if (await notifyUser(chatId, text, keyboard)) sent += 1;
   }
   return sent;
 }
 
-module.exports = { registerBot, botIsRunning, notifyUser, notifyAdmins };
+/**
+ * The admins responsible for ONE studio: its location admin and its
+ * managers. The root admin's own chat (ADMIN_TELEGRAM_CHAT_ID) is
+ * deliberately NOT included — a studio's day-to-day traffic is not the
+ * super admin's inbox.
+ */
+async function notifyLocationAdmins(locationId, text, keyboard = null) {
+  if (!botInstance || !locationId) return 0;
+
+  const Admin = require('../models/Admin');
+  try {
+    const admins = await Admin.find(
+      {
+        location: locationId,
+        status: 'active',
+        role: { $in: ['location_admin', 'location_manager'] },
+        telegramChatId: { $ne: null },
+      },
+      'telegramChatId'
+    ).lean();
+    return await fanOut(
+      admins.map((a) => a.telegramChatId),
+      text,
+      keyboard
+    );
+  } catch (err) {
+    console.error('Could not load studio admin chat list:', err.message);
+    return 0;
+  }
+}
+
+/**
+ * Every super admin, plus the root admin's chat from `.env`. For news that
+ * genuinely concerns the whole company rather than one studio.
+ */
+async function notifySuperAdmins(text, keyboard = null) {
+  if (!botInstance) return 0;
+
+  const Admin = require('../models/Admin');
+  const chatIds = [];
+  if (process.env.ADMIN_TELEGRAM_CHAT_ID) chatIds.push(process.env.ADMIN_TELEGRAM_CHAT_ID);
+  try {
+    const supers = await Admin.find(
+      { role: 'super', status: 'active', telegramChatId: { $ne: null } },
+      'telegramChatId'
+    ).lean();
+    supers.forEach((a) => chatIds.push(a.telegramChatId));
+  } catch (err) {
+    console.error('Could not load super admin chat list:', err.message);
+  }
+  return fanOut(chatIds, text, keyboard);
+}
+
+/**
+ * Kept for the few callers that genuinely have no studio in hand. Prefer
+ * notifyLocationAdmins wherever a location is known.
+ */
+async function notifyAllAdmins(text, keyboard = null) {
+  if (!botInstance) return 0;
+
+  const Admin = require('../models/Admin');
+  const chatIds = [];
+  if (process.env.ADMIN_TELEGRAM_CHAT_ID) chatIds.push(process.env.ADMIN_TELEGRAM_CHAT_ID);
+  try {
+    const admins = await Admin.find(
+      { status: 'active', telegramChatId: { $ne: null } },
+      'telegramChatId'
+    ).lean();
+    admins.forEach((a) => chatIds.push(a.telegramChatId));
+  } catch (err) {
+    console.error('Could not load admin chat list:', err.message);
+  }
+  return fanOut(chatIds, text, keyboard);
+}
+
+module.exports = {
+  registerBot,
+  botIsRunning,
+  notifyUser,
+  notifyLocationAdmins,
+  notifySuperAdmins,
+  notifyAllAdmins,
+  // Older name, now studio-aware where a location is passed
+  notifyAdmins: notifyAllAdmins,
+};

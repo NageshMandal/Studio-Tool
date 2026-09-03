@@ -1,13 +1,23 @@
 const mongoose = require('mongoose');
 
 /**
- * A normal (non-power) user asking for an instrument through the Telegram bot.
- * The request sits at 'pending' until an admin approves or rejects it from the
- * panel. Names and tags are copied in so the row still reads correctly if the
- * instrument or the person is later deleted.
+ * A normal (non-power) user asking to take an item out, from the Telegram
+ * bot or the staff website. The request sits at 'pending' until an admin
+ * AT THAT STUDIO approves or rejects it.
+ *
+ * Names and tags are copied in so the row still reads correctly if the item
+ * or the person is later deleted.
  */
 const assignmentRequestSchema = new mongoose.Schema(
   {
+    location: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Location',
+      required: true,
+      index: true,
+    },
+    locationName: { type: String, trim: true },
+
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     productName: { type: String, trim: true },
     assetTag: { type: String, trim: true },
@@ -33,7 +43,7 @@ const assignmentRequestSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-assignmentRequestSchema.index({ status: 1, createdAt: -1 });
+assignmentRequestSchema.index({ location: 1, status: 1, createdAt: -1 });
 assignmentRequestSchema.index({ user: 1, product: 1, status: 1 });
 
 module.exports = mongoose.model('AssignmentRequest', assignmentRequestSchema);

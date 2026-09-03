@@ -1,71 +1,108 @@
-<section class="panel panel-form">
+
+<section class="panel" style="max-width: 820px">
   <div class="panel-head">
-    <h2><%= isEdit ? 'Edit person' : 'New person' %></h2>
-    <a class="btn btn-ghost" href="/admin/users">Back to list</a>
+    <div>
+      <h2><%= isEdit ? 'Edit staff member' : 'New staff member' %></h2>
+      <p class="sub">
+        <%= isEdit ? 'They keep their existing password unless you set a new one'
+                   : 'They will belong to ' + studio.name %>
+      </p>
+    </div>
   </div>
 
-  <% if (error) { %>
-    <div class="alert alert-error"><%= error %></div>
-  <% } %>
+  <div class="panel-body">
+    <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
 
-  <form method="POST" action="<%= formAction %>">
-    <div class="grid-2">
-      <label class="field">
-        <span>Full name</span>
-        <input type="text" name="name" value="<%= user.name || '' %>" placeholder="Ravi Kumar" required />
-      </label>
+    <form method="POST" action="<%= formAction %>" novalidate>
+      <div class="form-grid">
+        <label class="field">
+          <span>Full name</span>
+          <input type="text" name="name" value="<%= user.name || '' %>" required autofocus />
+        </label>
 
-      <label class="field">
-        <span>Email</span>
-        <input type="email" name="email" value="<%= user.email || '' %>" placeholder="ravi@office.com" required />
-      </label>
+        <label class="field">
+          <span>Email</span>
+          <input type="email" name="email" value="<%= user.email || '' %>" required />
+          <span class="help">Used for the portal and the Telegram bot.</span>
+        </label>
 
-      <label class="field">
-        <span><%= isEdit ? 'New password' : 'Password' %></span>
-        <input type="password" name="password" minlength="6"
-               placeholder="<%= isEdit ? 'Leave blank to keep the current one' : 'At least 6 characters' %>"
-               <%= isEdit ? '' : 'required' %> />
-      </label>
+        <label class="field">
+          <span><%= isEdit ? 'New password (leave blank to keep)' : 'Password' %></span>
+          <input type="password" name="password" <%= isEdit ? '' : 'required' %> minlength="6" />
+        </label>
 
-      <label class="field">
-        <span>Phone</span>
-        <input type="tel" name="phone" value="<%= user.phone || '' %>" placeholder="+91 90000 00000" />
-      </label>
+        <label class="field">
+          <span>Employee ID</span>
+          <input type="text" name="employeeId" value="<%= user.employeeId || '' %>" />
+        </label>
 
-      <label class="field">
-        <span>Department</span>
-        <select name="department">
+        <label class="field">
+          <span>Phone</span>
+          <input type="text" name="phone" value="<%= user.phone || '' %>" />
+        </label>
+
+        <label class="field">
+          <span>Designation</span>
+          <input type="text" name="designation" value="<%= user.designation || '' %>" placeholder="Camera operator" />
+        </label>
+
+        <label class="field">
+          <span>Department</span>
+          <input type="text" name="department" list="departmentOptions" maxlength="60"
+                 value="<%= user.department || '' %>" placeholder="Type or pick a department" />
+          <span class="help">
+            Type any name your studio uses. Existing ones are suggested as you
+            type; leave it blank for Studio.
+          </span>
+        </label>
+
+        <%
+          /**
+           * The suggestions are a plain <datalist>, so the field stays a real
+           * text input: the browser offers what this studio already uses, and
+           * a new team name can simply be typed without waiting for anyone to
+           * add it to a list first.
+           */
+        %>
+        <datalist id="departmentOptions">
           <% departments.forEach(function (d) { %>
-            <option value="<%= d %>" <%= user.department === d ? 'selected' : '' %>><%= d %></option>
+            <option value="<%= d %>"></option>
           <% }); %>
-        </select>
-      </label>
+        </datalist>
 
-      <label class="field">
-        <span>Designation</span>
-        <input type="text" name="designation" value="<%= user.designation || '' %>" placeholder="Camera operator" />
-      </label>
+        <label class="field">
+          <span>Team role</span>
+          <select name="staffRole">
+            <% staffRoles.forEach(function (r) { %>
+              <option value="<%= r %>" <%= user.staffRole === r ? 'selected' : '' %>>
+                <%= r === 'sales' ? 'Sales' : 'Studio staff' %>
+              </option>
+            <% }); %>
+          </select>
+          <span class="help">Sales staff are flagged on their purchase requests.</span>
+        </label>
 
-      <label class="field">
-        <span>Status</span>
-        <select name="status">
-          <option value="active" <%= user.status === 'active' ? 'selected' : '' %>>Active</option>
-          <option value="inactive" <%= user.status === 'inactive' ? 'selected' : '' %>>Inactive</option>
-        </select>
-      </label>
+        <label class="field">
+          <span>Equipment account</span>
+          <select name="accountType">
+            <option value="normal" <%= user.accountType === 'normal' ? 'selected' : '' %>>Normal — must ask an admin</option>
+            <option value="power" <%= user.accountType === 'power' ? 'selected' : '' %>>Power — can take items directly</option>
+          </select>
+        </label>
 
-      <label class="field">
-        <span>Account type</span>
-        <select name="accountType">
-          <option value="normal" <%= user.accountType !== 'power' ? 'selected' : '' %>>Normal — needs admin approval to take items</option>
-          <option value="power" <%= user.accountType === 'power' ? 'selected' : '' %>>Power — can occupy items instantly from Telegram</option>
-        </select>
-      </label>
-    </div>
+        <label class="field">
+          <span>Status</span>
+          <select name="status">
+            <option value="active" <%= user.status === 'active' ? 'selected' : '' %>>Active</option>
+            <option value="inactive" <%= user.status === 'inactive' ? 'selected' : '' %>>Inactive</option>
+          </select>
+        </label>
+      </div>
 
-    <div class="form-actions">
-      <button class="btn btn-primary" type="submit"><%= isEdit ? 'Save changes' : 'Add person' %></button>
-      <a class="btn btn-ghost" href="/admin/users">Cancel</a>
-    </div>
-  </form>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><%= isEdit ? 'Save changes' : 'Add person' %></button>
+        <a class="btn btn-ghost" href="/admin/users">Cancel</a>
+      </div>
+    </form>
+  </div>
 </section>

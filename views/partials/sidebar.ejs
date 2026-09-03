@@ -1,36 +1,95 @@
-<aside class="sidebar">
-  <div class="brand">
-    <span class="brand-mark">SI</span>
-    <span class="brand-text">
-      Studio<br /><strong>Inventory</strong>
-    </span>
-  </div>
+<%
+  // The sidebar is the clearest statement of what a role can do, so it is
+  // built entirely from the capability map rather than from role strings.
+  // A link that is not shown here is also refused by the route guard — the
+  // two are kept deliberately in step.
+  var studioTheme = activeStudio ? activeStudio.theme : 'blue';
+%>
+<aside class="sidebar theme-<%= studioTheme %>">
+  <a class="brand" href="<%= can.isSuper ? '/admin/studios' : '/admin/dashboard' %>">
+    <span class="brand-mark">ST</span>
+    <span class="brand-name">Studio Tracker</span>
+  </a>
+
+  <% if (activeStudio) { %>
+    <div class="studio-chip">
+      <span class="dot"></span>
+      <span class="who">
+        <b><%= activeStudio.name %></b>
+        <span><%= activeStudio.code %> · <%= can.isSuper ? 'Viewing' : 'Your studio' %></span>
+      </span>
+    </div>
+  <% } else if (can.isSuper) { %>
+    <div class="studio-chip">
+      <span class="dot"></span>
+      <span class="who">
+        <b>All studios</b>
+        <span>Master view</span>
+      </span>
+    </div>
+  <% } %>
 
   <nav class="nav">
+    <% if (can.viewAllStudios) { %>
+      <a class="nav-link <%= active === 'master' ? 'is-active' : '' %>" href="/admin/master">
+        <%- icon('globe') %> Master dashboard
+      </a>
+      <a class="nav-link <%= active === 'studios' ? 'is-active' : '' %>" href="/admin/studios">
+        <%- icon('building') %> Studios
+      </a>
+      <div class="nav-group-label"><%= activeStudio ? activeStudio.name : 'Selected studio' %></div>
+    <% } %>
+
     <a class="nav-link <%= active === 'dashboard' ? 'is-active' : '' %>" href="/admin/dashboard">
-      <span class="nav-dot"></span> Dashboard
+      <%- icon('dashboard') %> Dashboard
+    </a>
+    <a class="nav-link <%= active === 'tracker' ? 'is-active' : '' %>" href="/admin/tracker">
+      <%- icon('tracker') %> Studio tracker
     </a>
     <a class="nav-link <%= active === 'products' ? 'is-active' : '' %>" href="/admin/products">
-      <span class="nav-dot"></span> Inventory
-    </a>
-    <a class="nav-link <%= active === 'users' ? 'is-active' : '' %>" href="/admin/users">
-      <span class="nav-dot"></span> People
+      <%- icon('box') %> Items
     </a>
     <a class="nav-link <%= active === 'requests' ? 'is-active' : '' %>" href="/admin/requests">
-      <span class="nav-dot"></span> Requests
+      <%- icon('inbox') %> Requests
       <% if (typeof pendingRequestCount !== 'undefined' && pendingRequestCount > 0) { %>
         <span class="nav-badge"><%= pendingRequestCount %></span>
       <% } %>
     </a>
-    <a class="nav-link <%= active === 'logs' ? 'is-active' : '' %>" href="/admin/logs">
-      <span class="nav-dot"></span> Usage log
+
+    <% if (can.viewProcurement) { %>
+      <a class="nav-link <%= active === 'purchase-requests' ? 'is-active' : '' %>" href="/admin/purchase-requests">
+        <%- icon('cart') %> Purchase requests
+        <% if (typeof pendingPurchaseCount !== 'undefined' && pendingPurchaseCount > 0) { %>
+          <span class="nav-badge"><%= pendingPurchaseCount %></span>
+        <% } %>
+      </a>
+    <% } %>
+
+    <a class="nav-link <%= active === 'users' ? 'is-active' : '' %>" href="/admin/users">
+      <%- icon('people') %> Staff
     </a>
-    <a class="nav-link <%= active === 'admins' ? 'is-active' : '' %>" href="/admin/admins">
-      <span class="nav-dot"></span> Admins
+    <a class="nav-link <%= active === 'logs' ? 'is-active' : '' %>" href="/admin/logs">
+      <%- icon('log') %> Usage log
+    </a>
+    <a class="nav-link <%= active === 'reports' ? 'is-active' : '' %>" href="/admin/reports">
+      <%- icon('report') %> Reports
+    </a>
+
+    <% if (can.manageAdmins) { %>
+      <div class="nav-group-label">Administration</div>
+      <a class="nav-link <%= active === 'admins' ? 'is-active' : '' %>" href="/admin/admins">
+        <%- icon('shield') %> Admin accounts
+      </a>
+    <% } %>
+
+    <a class="nav-link <%= active === 'settings' ? 'is-active' : '' %>" href="/admin/settings">
+      <%- icon('settings') %> Settings
     </a>
   </nav>
 
   <div class="sidebar-foot">
-    <p>Every item carries a printable asset tag.</p>
+    <a class="nav-link nav-logout" href="/logout">
+      <%- icon('logout') %> Log out
+    </a>
   </div>
 </aside>

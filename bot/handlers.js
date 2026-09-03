@@ -8,7 +8,8 @@ const { createBooking } = require('../services/booking');
 const approvals = require('../services/approvals');
 const NextClaim = require('../models/NextClaim');
 const { createClaim, releaseForClaim, keepDespiteClaim } = require('../services/claims');
-const { notifyUser, notifyAdmins } = require('./notify');
+const { studioName } = require('../services/studios');
+const { notifyUser, notifyLocationAdmins } = require('./notify');
 const { setSession, getSession, clearSession } = require('./sessions');
 const views = require('./views');
 const { escapeHtml, formatWhen, formatDuration, todayKey, parseDateKey, formatDay } = require('../utils/format');
@@ -85,13 +86,21 @@ const signedInUser = (chatId) =>
 const signedInAdmin = (chatId) =>
   Admin.findOne({ telegramChatId: String(chatId), status: 'active' });
 
-const pendingCounts = async () => ({
-  requests: await AssignmentRequest.countDocuments({ status: 'pending' }),
-  bookings: await Booking.countDocuments({ status: 'pending' }),
-});
+/**
+ * What is waiting on this admin — and only on them. A super admin has no
+ * studio of their own, so they see the whole company's queue; a location
+ * admin sees their own branch and nothing else.
+ */
+const pendingCounts = async (admin) => {
+  const scope = admin && admin.location ? { location: admin.location } : {};
+  return {
+    requests: await AssignmentRequest.countDocuments({ ...scope, status: 'pending' }),
+    bookings: await Booking.countDocuments({ ...scope, status: 'pending' }),
+  };
+};
 
 const showAdminMenu = async (bot, chatId, admin) =>
-  send(bot, chatId, views.adminMenu(admin, await pendingCounts()));
+  send(bot, chatId, views.adminMenu(admin, await pendingCounts(admin)));
 
 // Look up the display names for whoever is holding things
 async function holderNames(items) {
@@ -101,7 +110,24 @@ async function holderNames(items) {
   return people.reduce((acc, p) => ({ ...acc, [String(p._id)]: p.name }), {});
 }
 
-const loadProducts = (filter = {}) => Product.find(filter).sort({ name: 1 }).lean();
+/**
+ * Every equipment lookup in the bot is scoped to the signed-in person's own
+ * studio. This is the single choke point for that rule: because both helpers
+ * take the user and add `location` themselves, a new command cannot forget
+ * the clause and quietly show somebody another branch's gear.
+ */
+const loadProducts = (user, filter = {}) =>
+  Product.find({ ...filter, location: user.location }).sort({ name: 1 }).lean();
+
+/**
+ * One item, but only if it belongs to the person's studio. An id that is
+ * real but from elsewhere simply comes back null, so every caller's existing
+ * "item is gone" branch already handles it correctly.
+ */
+const productFor = (user, id, lean = true) => {
+  const q = Product.findOne({ _id: id, location: user.location });
+  return lean ? q.lean() : q;
+};
 
 // The viewer's own open request for an item, if they have one
 const pendingRequestFor = (userId, productId) =>
@@ -126,7 +152,7 @@ const upcomingBookingsOf = (userId) =>
  * the admin, exactly like a request to take an item out right now.
  */
 async function finishBooking(bot, chatId, user, productId, dateKey, reason, ack, query) {
-  const product = await Product.findById(productId).lean();
+  const product = await productFor(user, productId);
   clearSession(chatId);
 
   if (!product) {
@@ -189,7 +215,7 @@ async function itemDetailView(item, user) {
  * the holder. Power users only — the service enforces that too.
  */
 async function finishClaim(bot, chatId, user, productId, reason, ack, query) {
-  const product = await Product.findById(productId).lean();
+  const product = await productFor(user, productId);
   clearSession(chatId);
 
   if (!product) {
@@ -220,9 +246,13 @@ async function finishClaim(bot, chatId, user, productId, reason, ack, query) {
   return query ? replace(bot, query, view) : send(bot, chatId, view);
 }
 
-// Every signed-in admin hears about a new request, with decision buttons
+/**
+ * The admins of the request's OWN studio hear about it, with decision
+ * buttons. Nobody else does — a Ranchi request is not Kolkata's to approve.
+ */
 function pingAdminAboutRequest(request) {
-  notifyAdmins(
+  notifyLocationAdmins(
+    request.location,
     `🙋 <b>${escapeHtml(request.userName)}</b> is asking for ` +
       `<b>${escapeHtml(request.productName)}</b> <code>${escapeHtml(request.assetTag || '')}</code>.\n` +
       (request.reason ? `📝 ${escapeHtml(request.reason)}\n` : '') +
@@ -264,7 +294,7 @@ const askForEmail = (bot, chatId) =>
  * panel, at which point the bot messages them.
  */
 async function finishOccupy(bot, chatId, user, productId, reason, ack, query) {
-  const product = await Product.findById(productId);
+  const product = await productFor(user, productId, false);
   clearSession(chatId);
 
   if (!product) {
@@ -309,6 +339,8 @@ async function finishOccupy(bot, chatId, user, productId, reason, ack, query) {
         else await bot.sendMessage(chatId, note);
       } else {
         const request = await AssignmentRequest.create({
+          location: product.location,
+          locationName: await studioName(product.location),
           product: product._id,
           productName: product.name,
           assetTag: product.assetTag,
@@ -330,7 +362,7 @@ async function finishOccupy(bot, chatId, user, productId, reason, ack, query) {
     }
   }
 
-  const fresh = await Product.findById(productId).lean();
+  const fresh = await productFor(user, productId);
   const view = await itemDetailView(fresh, user);
   return query ? replace(bot, query, view) : send(bot, chatId, view);
 }
@@ -415,12 +447,12 @@ async function handleMessage(bot, msg) {
     }
 
     if (command === '/items' || command === '/categories') {
-      const items = await loadProducts();
+      const items = await loadProducts(user);
       return send(bot, chatId, views.categoryList(groupByCategory(items)));
     }
 
     if (command === '/mine') {
-      const mine = await loadProducts({ assignedTo: user._id });
+      const mine = await loadProducts(user, { assignedTo: user._id });
       const pending = await pendingRequestsOf(user._id);
       const bookings = await upcomingBookingsOf(user._id);
       const claims = await waitingClaimsOf(user._id);
@@ -449,7 +481,7 @@ async function handleMessage(bot, msg) {
       return bot.sendMessage(chatId, 'That day has already passed — send today\'s date or a future one.');
     }
 
-    const item = await Product.findById(session.productId).lean();
+    const item = await productFor(user, session.productId);
     if (!item) {
       clearSession(chatId);
       return send(bot, chatId, views.mainMenu(user));
@@ -587,7 +619,7 @@ async function handleCallback(bot, query) {
   if (admin) {
     if (data === 'adm:menu' || data === 'menu') {
       await ack();
-      return replace(bot, query, views.adminMenu(admin, await pendingCounts()));
+      return replace(bot, query, views.adminMenu(admin, await pendingCounts(admin)));
     }
 
     if (data === 'adm:logout') {
@@ -635,7 +667,7 @@ async function handleCallback(bot, query) {
 
     if (data === 'adm:busy') {
       await ack();
-      const busy = await loadProducts({ assignedTo: { $ne: null } });
+      const busy = await loadProducts(user, { assignedTo: { $ne: null } });
       const view = views.occupiedList(busy, await holderNames(busy));
       view.keyboard = { inline_keyboard: [[{ text: '⬅️ Back', callback_data: 'adm:menu' }]] };
       return replace(bot, query, view);
@@ -643,10 +675,10 @@ async function handleCallback(bot, query) {
 
     // ✅ / ❌ on a request or booking card — one decision engine for bot and web
     const decide =
-      data.startsWith('aprq:') ? () => approvals.approveRequest(data.slice(5), admin.email) :
-      data.startsWith('rjrq:') ? () => approvals.rejectRequest(data.slice(5), admin.email, 'Declined from Telegram') :
-      data.startsWith('apbk:') ? () => approvals.approveBooking(data.slice(5), admin.email) :
-      data.startsWith('rjbk:') ? () => approvals.rejectBooking(data.slice(5), admin.email, 'Declined from Telegram') :
+      data.startsWith('aprq:') ? () => approvals.approveRequest(data.slice(5), admin.email, admin.location) :
+      data.startsWith('rjrq:') ? () => approvals.rejectRequest(data.slice(5), admin.email, 'Declined from Telegram', admin.location) :
+      data.startsWith('apbk:') ? () => approvals.approveBooking(data.slice(5), admin.email, admin.location) :
+      data.startsWith('rjbk:') ? () => approvals.rejectBooking(data.slice(5), admin.email, 'Declined from Telegram', admin.location) :
       null;
 
     if (decide) {
@@ -669,7 +701,7 @@ async function handleCallback(bot, query) {
 
     // Any other tap in an admin chat goes back to the admin menu
     await ack();
-    return replace(bot, query, views.adminMenu(admin, await pendingCounts()));
+    return replace(bot, query, views.adminMenu(admin, await pendingCounts(admin)));
   }
 
   /* ---------- staff taps ---------- */
@@ -687,14 +719,14 @@ async function handleCallback(bot, query) {
 
   if (data === 'cats') {
     await ack();
-    const items = await loadProducts();
+    const items = await loadProducts(user);
     return replace(bot, query, views.categoryList(groupByCategory(items)));
   }
 
   if (data.startsWith('cat:')) {
     await ack();
     const category = data.slice(4);
-    const items = await loadProducts({ category });
+    const items = await loadProducts(user, { category });
     const holders = await holderNames(items);
     const view = views.itemList(category, items, holders);
 
@@ -712,7 +744,7 @@ async function handleCallback(bot, query) {
 
   if (data === 'mine') {
     await ack();
-    const mine = await loadProducts({ assignedTo: user._id });
+    const mine = await loadProducts(user, { assignedTo: user._id });
     const pending = await pendingRequestsOf(user._id);
     const bookings = await upcomingBookingsOf(user._id);
     const claims = await waitingClaimsOf(user._id);
@@ -721,7 +753,7 @@ async function handleCallback(bot, query) {
 
   if (data === 'busy') {
     await ack();
-    const busy = await loadProducts({ assignedTo: { $ne: null } });
+    const busy = await loadProducts(user, { assignedTo: { $ne: null } });
     return replace(bot, query, views.occupiedList(busy, await holderNames(busy)));
   }
 
@@ -736,14 +768,14 @@ async function handleCallback(bot, query) {
 
   if (data.startsWith('item:')) {
     await ack();
-    const item = await Product.findById(data.slice(5)).lean();
+    const item = await productFor(user, data.slice(5));
     if (!item) return replace(bot, query, views.mainMenu(user));
     return replace(bot, query, await itemDetailView(item, user));
   }
 
   // ⚡ "Book next in line" on an occupied item (power users)
   if (data.startsWith('nxt:')) {
-    const product = await Product.findById(data.slice(4)).lean();
+    const product = await productFor(user, data.slice(4));
     if (!product) {
       await ack('That item is gone');
       return replace(bot, query, views.mainMenu(user));
@@ -805,9 +837,9 @@ async function handleCallback(bot, query) {
         );
       }
     }
-    const item = claim ? await Product.findById(claim.product).lean() : null;
+    const item = claim ? await productFor(user, claim.product) : null;
     if (item) return replace(bot, query, await itemDetailView(item, user));
-    const mine = await loadProducts({ assignedTo: user._id });
+    const mine = await loadProducts(user, { assignedTo: user._id });
     return replace(bot, query, views.myItems(mine, await pendingRequestsOf(user._id), await upcomingBookingsOf(user._id), await waitingClaimsOf(user._id)));
   }
 
@@ -835,7 +867,7 @@ async function handleCallback(bot, query) {
 
   // Tapping "Occupy now" / "Request this item" asks what it is for first
   if (data.startsWith('occ:')) {
-    const product = await Product.findById(data.slice(4)).lean();
+    const product = await productFor(user, data.slice(4));
     if (!product) {
       await ack('That item is gone');
       return replace(bot, query, views.mainMenu(user));
@@ -859,7 +891,7 @@ async function handleCallback(bot, query) {
 
   // "Book for a date" — show the day picker
   if (data.startsWith('bk:')) {
-    const product = await Product.findById(data.slice(3)).lean();
+    const product = await productFor(user, data.slice(3));
     if (!product) {
       await ack('That item is gone');
       return replace(bot, query, views.mainMenu(user));
@@ -876,7 +908,7 @@ async function handleCallback(bot, query) {
   // A tapped day
   if (data.startsWith('bkd:')) {
     const [, productId, dateKey] = data.split(':');
-    const product = await Product.findById(productId).lean();
+    const product = await productFor(user, productId);
     if (!product) {
       await ack('That item is gone');
       return replace(bot, query, views.mainMenu(user));
@@ -923,7 +955,7 @@ async function handleCallback(bot, query) {
       await booking.save();
       await ack('Booking cancelled');
     }
-    const mine = await loadProducts({ assignedTo: user._id });
+    const mine = await loadProducts(user, { assignedTo: user._id });
     const pending = await pendingRequestsOf(user._id);
     const bookings = await upcomingBookingsOf(user._id);
     const claims = await waitingClaimsOf(user._id);
@@ -946,9 +978,9 @@ async function handleCallback(bot, query) {
       await ack('Request cancelled');
     }
 
-    const item = request ? await Product.findById(request.product).lean() : null;
+    const item = request ? await productFor(user, request.product) : null;
     if (item) return replace(bot, query, await itemDetailView(item, user));
-    const mine = await loadProducts({ assignedTo: user._id });
+    const mine = await loadProducts(user, { assignedTo: user._id });
     const pending = await pendingRequestsOf(user._id);
     const bookings = await upcomingBookingsOf(user._id);
     return replace(bot, query, views.myItems(mine, pending, bookings));
@@ -969,7 +1001,7 @@ async function handleCallback(bot, query) {
   }
 
   if (data.startsWith('ret:')) {
-    const product = await Product.findById(data.slice(4));
+    const product = await productFor(user, data.slice(4), false);
     if (!product) {
       await ack('That item is gone');
       return replace(bot, query, views.mainMenu(user));
@@ -977,7 +1009,7 @@ async function handleCallback(bot, query) {
 
     if (!product.assignedTo || String(product.assignedTo) !== String(user._id)) {
       await ack('That one is not with you');
-      const fresh = await Product.findById(product._id).lean();
+      const fresh = await productFor(user, product._id);
       return replace(bot, query, await itemDetailView(fresh, user));
     }
 
@@ -989,7 +1021,7 @@ async function handleCallback(bot, query) {
       HTML
     );
 
-    const fresh = await Product.findById(product._id).lean();
+    const fresh = await productFor(user, product._id);
     return replace(bot, query, await itemDetailView(fresh, user));
   }
 

@@ -3,114 +3,102 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Studio shelf · Studio Inventory</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <title><%= studio.name %> shelf · Studio Tracker</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
-<body class="staff-body">
-  <header class="staff-topbar">
-    <span class="brand">
-      <span class="brand-mark">SI</span>
-      <span class="brand-text">Studio <strong>Inventory</strong></span>
-    </span>
-    <div class="staff-topbar-right">
-      <a class="btn btn-primary btn-small" href="/login">Sign in</a>
+<body class="theme-<%= studio.theme %>">
+  <header class="topbar">
+    <div class="topbar-title">
+      <div class="brand" style="padding: 0">
+        <span class="brand-mark">ST</span>
+        <span class="brand-name" style="color: var(--text)"><%= studio.name %> shelf</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <a class="btn btn-ghost btn-sm" href="/">Other studios</a>
+      <a class="btn btn-primary btn-sm" href="/login">Sign in</a>
     </div>
   </header>
 
-  <main class="staff-main">
+  <div class="content">
     <section class="stat-grid">
-      <div class="stat">
-        <span class="stat-label">On the register</span>
-        <span class="stat-value"><%= counts.total %></span>
-        <span class="stat-note">items</span>
+      <div class="stat tone-blue">
+        <div class="stat-head"><div><span class="stat-label">On the register</span><div class="stat-value"><%= counts.total %></div></div></div>
       </div>
-      <div class="stat">
-        <span class="stat-label">Available</span>
-        <span class="stat-value"><%= counts.available %></span>
-        <span class="stat-note">on the shelf now</span>
+      <div class="stat tone-green">
+        <div class="stat-head"><div><span class="stat-label">Available now</span><div class="stat-value"><%= counts.available %></div></div></div>
       </div>
-      <div class="stat">
-        <span class="stat-label">Occupied</span>
-        <span class="stat-value"><%= counts.occupied %></span>
-        <span class="stat-note">out with someone</span>
+      <div class="stat tone-amber">
+        <div class="stat-head"><div><span class="stat-label">Out with staff</span><div class="stat-value"><%= counts.occupied %></div></div></div>
       </div>
-      <div class="stat">
-        <span class="stat-label">In maintenance</span>
-        <span class="stat-value"><%= counts.maintenance %></span>
-        <span class="stat-note">not takeable</span>
+      <div class="stat tone-red">
+        <div class="stat-head"><div><span class="stat-label">In maintenance</span><div class="stat-value"><%= counts.maintenance %></div></div></div>
       </div>
     </section>
 
     <section class="panel">
-      <div class="panel-head">
-        <form class="filters" method="GET" action="/">
-          <input type="search" name="q" value="<%= query.q %>" placeholder="Search name, tag, serial…" />
+      <form class="filters" method="GET" action="/shelf/<%= studio._id %>">
+        <label class="field">
+          <span>Search</span>
+          <input type="search" name="q" value="<%= query.q %>" placeholder="Name, tag or brand" />
+        </label>
+        <label class="field">
+          <span>Category</span>
           <select name="category">
             <option value="">All categories</option>
             <% categories.forEach(function (c) { %>
               <option value="<%= c %>" <%= query.category === c ? 'selected' : '' %>><%= c %></option>
             <% }); %>
           </select>
+        </label>
+        <label class="field">
+          <span>Status</span>
           <select name="status">
-            <option value="">Any status</option>
+            <option value="">All status</option>
             <% statuses.forEach(function (s) { %>
               <option value="<%= s %>" <%= query.status === s ? 'selected' : '' %>><%= s %></option>
             <% }); %>
           </select>
-          <button class="btn btn-ghost" type="submit">Filter</button>
-          <a class="btn btn-ghost" href="/">Reset</a>
-        </form>
-      </div>
+        </label>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">Filter</button>
+          <a class="btn btn-ghost" href="/shelf/<%= studio._id %>">Reset</a>
+        </div>
+      </form>
     </section>
 
-    <% groups.forEach(function (g) { %>
-      <section class="panel">
-        <div class="panel-head"><h2><%= g.category %> <span class="row-sub"><%= g.available %> of <%= g.items.length %> free</span></h2></div>
-        <table class="table">
-          <tbody>
-            <% g.items.forEach(function (p) {
-                 var retired = p.condition === 'retired';
-                 var blocked = retired || p.status === 'maintenance' || p.condition === 'needs-repair';
-            %>
-              <tr>
-                <td class="thumb-cell"><%- include('partials/thumb', { thumbUrl: p.imageUrl, thumbName: p.name }) %></td>
-                <td>
-                  <span class="row-title"><%= p.name %></span>
-                  <span class="row-sub">
-                    <span class="asset-tag"><%= p.assetTag %></span>
-                    <% if (p.brand || p.model) { %> · <%= [p.brand, p.model].filter(Boolean).join(' ') %><% } %>
-                  </span>
-                </td>
-                <td class="right">
-                  <% if (retired) { %>
-                    <span class="pill pill-retired">retired</span>
-                  <% } else if (blocked) { %>
-                    <span class="pill pill-maintenance">in maintenance</span>
-                  <% } else if (p.assignedTo) { %>
-                    <span class="pill pill-assigned">occupied</span>
-                    <span class="row-sub">with <%= holderMap[String(p.assignedTo)] || 'someone' %> · since <%= formatWhen(p.occupiedAt) %></span>
-                    <% if (p.occupyReason) { %>
-                      <span class="row-sub">for: <%= p.occupyReason %></span>
-                    <% } %>
-                  <% } else { %>
-                    <span class="pill pill-available">available</span>
-                  <% } %>
-                </td>
-              </tr>
-            <% }); %>
-          </tbody>
-        </table>
-      </section>
-    <% }); %>
-
     <% if (groups.length === 0) { %>
-      <section class="panel"><div class="empty"><p><%= (query.q || query.category || query.status) ? 'No items match this filter.' : 'Nothing is on the register yet.' %></p></div></section>
+      <div class="panel"><div class="empty"><h3>Nothing to show</h3><p>No items match those filters.</p></div></div>
     <% } %>
 
-    <p class="hint" style="text-align:center">Sign in to occupy an item or book one for a date.</p>
-  </main>
+    <% groups.forEach(function (g) { %>
+      <p class="category-head"><%= g.category %> · <%= g.available %> of <%= g.items.length %> free</p>
+      <div class="item-grid">
+        <% g.items.forEach(function (p) { %>
+          <div class="item-card">
+            <div class="top">
+              <%- include('partials/thumb', { thumbUrl: p.imageUrl, thumbName: p.name }) %>
+              <div style="min-width: 0">
+                <h4><%= p.name %></h4>
+                <span class="row-sub"><%= p.assetTag %></span>
+              </div>
+            </div>
+            <div>
+              <% if (p.assignedTo) { %>
+                <span class="badge badge-amber">With <%= holderMap[String(p.assignedTo)] || 'a team member' %></span>
+              <% } else if (p.condition === 'retired') { %>
+                <span class="badge badge-grey">Retired</span>
+              <% } else if (p.status === 'maintenance' || p.condition === 'needs-repair') { %>
+                <span class="badge badge-red">Maintenance</span>
+              <% } else { %>
+                <span class="badge badge-green">Available</span>
+              <% } %>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    <% }); %>
+  </div>
 </body>
 </html>

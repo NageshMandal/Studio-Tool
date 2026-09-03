@@ -1,0 +1,74 @@
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Studios</h2>
+      <p class="sub">Each studio owns its own items, staff, requests and reports</p>
+    </div>
+    <a class="btn btn-primary" href="/admin/studios/new"><%- icon('plus', 15) %> Add studio</a>
+  </div>
+
+  <% if (studios.length === 0) { %>
+    <div class="empty">
+      <h3>No studios yet</h3>
+      <p>Create the first studio, then add its location admin so somebody can run it.</p>
+      <a class="btn btn-primary" href="/admin/studios/new">Add the first studio</a>
+    </div>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Studio</th><th>Code</th><th>City</th>
+            <th>Items</th><th>Staff</th><th>Admins</th>
+            <th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% studios.forEach(function (s) { %>
+            <tr>
+              <td>
+                <span class="row-title"><%= s.name %></span>
+                <span class="row-sub"><%= s.address || 'No address on file' %></span>
+              </td>
+              <td><span class="asset-tag"><%= s.code %></span></td>
+              <td><%= s.city || '—' %></td>
+              <td><%= s.itemCount %></td>
+              <td><%= s.staffCount %></td>
+              <td><%= s.adminCount %></td>
+              <td>
+                <% if (s.status === 'active') { %>
+                  <span class="badge badge-green">Active</span>
+                <% } else { %>
+                  <span class="badge badge-grey">Archived</span>
+                <% } %>
+              </td>
+              <td>
+                <div class="btn-row">
+                  <% if (s.status === 'active') { %>
+                    <a class="btn btn-ghost btn-sm" href="/admin/studios/open/<%= s._id %>">Open</a>
+                  <% } %>
+                  <a class="btn btn-ghost btn-sm" href="/admin/studios/<%= s._id %>/edit">Edit</a>
+                  <form method="POST" action="/admin/studios/<%= s._id %>/status?_method=PATCH"
+                        onsubmit="return confirm('<%= s.status === 'active'
+                          ? "Archive " + s.name + "? Its records are kept, but its admins are deactivated and nobody can sign in to it."
+                          : "Restore " + s.name + "? You will need to reactivate its admins separately." %>')">
+                    <button class="btn <%= s.status === 'active' ? 'btn-danger' : 'btn-ok' %> btn-sm" type="submit">
+                      <%= s.status === 'active' ? 'Archive' : 'Restore' %>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<div class="alert alert-info">
+  <b>Studios are archived, never deleted.</b> Archiving closes the doors — its
+  admins are deactivated and nobody can sign in — but every item, person and log
+  row stays exactly where it is, so the decision is always reversible.
+</div>

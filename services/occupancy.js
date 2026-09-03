@@ -1,5 +1,6 @@
 const UsageLog = require('../models/UsageLog');
 const Booking = require('../models/Booking');
+const { studioName } = require('./studios');
 const { todayKey } = require('../utils/format');
 
 /**
@@ -45,10 +46,16 @@ async function occupyProduct({ product, user, reason, source = 'telegram' }) {
   product.occupyReason = cleanReason;
   await product.save();
 
+  // The studio is taken from the ITEM, not from the person. They are the
+  // same in normal use, and when they somehow are not, the item's studio is
+  // the one whose report this movement belongs in.
   return UsageLog.create({
+    location: product.location,
+    locationName: await studioName(product.location),
     product: product._id,
     productName: product.name,
     assetTag: product.assetTag,
+    category: product.category,
     imageUrl: product.imageUrl || null,
     user: user._id,
     userName: user.name,

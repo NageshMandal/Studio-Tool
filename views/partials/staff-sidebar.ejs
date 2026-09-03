@@ -1,24 +1,38 @@
-<aside class="sidebar">
+<aside class="sidebar theme-<%= studio.theme || 'blue' %>">
   <a class="brand" href="/staff">
-    <span class="brand-mark">SI</span>
-    <span class="brand-text">
-      Studio<br /><strong>Inventory</strong>
-    </span>
+    <span class="brand-mark">ST</span>
+    <span class="brand-name">Studio Tracker</span>
   </a>
+
+  <div class="studio-chip">
+    <span class="dot"></span>
+    <span class="who">
+      <b><%= studio.name %></b>
+      <span>Your studio</span>
+    </span>
+  </div>
 
   <nav class="nav">
     <a class="nav-link <%= active === 'staff-dashboard' ? 'is-active' : '' %>" href="/staff">
-      <span class="nav-dot"></span> Dashboard
+      <%- icon('dashboard') %> My dashboard
       <% if (typeof unreadAlertCount !== 'undefined' && unreadAlertCount > 0) { %>
         <span class="nav-badge"><%= unreadAlertCount %></span>
       <% } %>
     </a>
     <a class="nav-link <%= active === 'staff-inventory' ? 'is-active' : '' %>" href="/staff/inventory">
-      <span class="nav-dot"></span> Inventory
+      <%- icon('box') %> Equipment
+    </a>
+    <a class="nav-link <%= active === 'staff-purchase' ? 'is-active' : '' %>" href="/staff/purchase-requests">
+      <%- icon('cart') %> Request an item
     </a>
   </nav>
 
   <div class="sidebar-foot">
-    <p>Signed in as <%= staff.name %> · <%= staff.accountType %> account.</p>
+    <form method="POST" action="/staff/logout">
+      <button class="nav-link nav-logout" type="submit"
+              style="background: none; border: none; width: 100%; cursor: pointer; font: inherit">
+        <%- icon('logout') %> Log out
+      </button>
+    </form>
   </div>
 </aside>

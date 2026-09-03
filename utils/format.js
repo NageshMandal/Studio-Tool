@@ -68,6 +68,66 @@ function shiftDay(iso, days) {
   return d.toISOString().slice(0, 10);
 }
 
+/* ---- Month keys, for the monthly reports ---------------------------- *
+ * A month is a 'YYYY-MM' key in the configured timezone. The same offset
+ * trick as dayRange is used, so "March at this studio" starts at local
+ * midnight on the 1st rather than at UTC midnight.
+ */
+
+// The month a given instant falls in, in the configured timezone
+function monthKeyOf(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: '2-digit',
+  })
+    .format(new Date(date))
+    .slice(0, 7);
+}
+
+const currentMonthKey = () => monthKeyOf(new Date());
+
+// The offset of the configured timezone at a given instant, in ms
+function offsetAt(isoDate) {
+  const probe = new Date(`${isoDate}T12:00:00Z`);
+  const local = new Date(probe.toLocaleString('en-US', { timeZone: TZ }));
+  const utc = new Date(probe.toLocaleString('en-US', { timeZone: 'UTC' }));
+  return local - utc;
+}
+
+/** '2026-03' -> the UTC instants the local month starts and ends at. */
+function monthRange(monthKey) {
+  const key = /^\d{4}-\d{2}$/.test(monthKey || '') ? monthKey : currentMonthKey();
+  const [year, month] = key.split('-').map(Number);
+
+  const firstIso = `${key}-01`;
+  const nextMonth = month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, '0')}`;
+  const nextIso = `${nextMonth}-01`;
+
+  const start = new Date(new Date(`${firstIso}T00:00:00Z`).getTime() - offsetAt(firstIso));
+  const end = new Date(new Date(`${nextIso}T00:00:00Z`).getTime() - offsetAt(nextIso));
+
+  return { key, start, end };
+}
+
+// '2026-03' -> 'March 2026'
+function monthLabel(monthKey) {
+  const key = /^\d{4}-\d{2}$/.test(monthKey || '') ? monthKey : currentMonthKey();
+  return new Date(`${key}-01T12:00:00Z`).toLocaleDateString('en-IN', {
+    timeZone: 'UTC',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+// Step a month key forwards or backwards
+function shiftMonth(monthKey, delta) {
+  const key = /^\d{4}-\d{2}$/.test(monthKey || '') ? monthKey : currentMonthKey();
+  const [year, month] = key.split('-').map(Number);
+  const total = year * 12 + (month - 1) + delta;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`;
+}
+
 // Telegram messages are sent with parse_mode HTML
 function escapeHtml(text) {
   return String(text == null ? '' : text)
@@ -137,4 +197,9 @@ module.exports = {
   todayKey,
   parseDateKey,
   formatDay,
+  monthKeyOf,
+  currentMonthKey,
+  monthRange,
+  monthLabel,
+  shiftMonth,
 };

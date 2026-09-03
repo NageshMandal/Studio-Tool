@@ -1,18 +1,26 @@
 const mongoose = require('mongoose');
 
 /**
- * "I need this next" — a power user claiming an instrument that is currently
- * with someone else.
+ * "I need this next" — a power user claiming an item that is currently with
+ * someone else at the same studio.
  *
  * The current holder is told on Telegram and on their staff page, with
  * Release / Keep buttons. If they release — or simply return the item the
- * normal way — the instrument is handed straight to the claimant instead of
- * going back on the shelf. If they keep it, the claimant is told.
+ * normal way — the item is handed straight to the claimant instead of going
+ * back on the shelf. If they keep it, the claimant is told.
  *
- * One waiting claim per instrument: next in line is a single person.
+ * One waiting claim per item: next in line is a single person.
  */
 const nextClaimSchema = new mongoose.Schema(
   {
+    location: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Location',
+      required: true,
+      index: true,
+    },
+    locationName: { type: String, trim: true },
+
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     productName: { type: String, trim: true },
     assetTag: { type: String, trim: true },
@@ -42,6 +50,7 @@ const nextClaimSchema = new mongoose.Schema(
 );
 
 nextClaimSchema.index({ product: 1, status: 1 });
+nextClaimSchema.index({ location: 1, status: 1 });
 nextClaimSchema.index({ user: 1, status: 1 });
 
 module.exports = mongoose.model('NextClaim', nextClaimSchema);

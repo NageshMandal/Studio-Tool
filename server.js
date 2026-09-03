@@ -12,7 +12,14 @@ const adminRoutes = require('./routes/adminRoutes');
 const apiRoutes = require('./routes/apiRoutes');
 const staffRoutes = require('./routes/staffRoutes');
 const { startBot } = require('./bot');
-const { formatWhen, formatTime, formatDuration, formatSince, formatDay, todayKey } = require('./utils/format');
+const {
+  formatWhen,
+  formatTime,
+  formatDuration,
+  formatSince,
+  formatDay,
+} = require('./utils/format');
+const { icon } = require('./utils/icons');
 
 const requiredEnv = ['MONGO_URI', 'JWT_SECRET', 'ADMIN_EMAIL', 'ADMIN_PASSWORD'];
 const missing = requiredEnv.filter((key) => !process.env[key]);
@@ -36,9 +43,13 @@ app.use(cookieParser());
 app.use(methodOverride('_method'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Small helpers every view can use
+// Helpers every view can use
 app.use((req, res, next) => {
   res.locals.admin = null;
+  res.locals.can = {};
+  res.locals.scope = null;
+  res.locals.activeStudio = null;
+  res.locals.studios = [];
   res.locals.active = '';
   res.locals.formatDate = (d) =>
     d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
@@ -48,21 +59,52 @@ app.use((req, res, next) => {
   res.locals.formatDuration = formatDuration;
   res.locals.formatSince = formatSince;
   res.locals.formatDay = formatDay;
+  // Available to every view, layout and partial — see utils/icons.js
+  res.locals.icon = icon;
   next();
 });
 
-// Public shelf view: anyone can see what is available and what is out,
-// without signing in. Staff and admin sign-in links live in its header.
+/**
+ * The public shelf, split by studio.
+ *
+ * Anyone can see what is on the shelf without signing in, but a visitor now
+ * picks a studio first — a single merged list across three cities would tell
+ * somebody at Patna nothing useful about what they can walk over and collect.
+ */
+const Location = require('./models/Location');
 const Product = require('./models/Product');
 const User = require('./models/User');
-const { CATEGORIES, STATUSES } = require('./controllers/productController');
+const { CATEGORIES } = require('./models/Product');
+
 app.get('/', async (req, res, next) => {
   try {
+    const studios = await Location.find({ status: 'active' }).sort({ name: 1 }).lean();
+
+    const counts = await Product.aggregate([{ $group: { _id: '$location', total: { $sum: 1 } } }]);
+    const countMap = counts.reduce((acc, c) => ({ ...acc, [String(c._id)]: c.total }), {});
+    studios.forEach((s) => {
+      s.itemCount = countMap[String(s._id)] || 0;
+    });
+
+    // One studio only: skip the picker, there is nothing to choose between
+    if (studios.length === 1) return res.redirect(`/shelf/${studios[0]._id}`);
+
+    res.render('public-picker', { layout: false, studios });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get('/shelf/:studioId', async (req, res, next) => {
+  try {
+    const studio = await Location.findOne({ _id: req.params.studioId, status: 'active' }).lean();
+    if (!studio) return res.redirect('/');
+
     const { q, category, status } = req.query;
 
-    // The listing honours the filters; the stat cards at the top always
-    // show the whole register so the wall screen keeps its true totals.
-    const filter = {};
+    // The listing honours the filters; the stat cards always show the whole
+    // studio, so the wall screen keeps its true totals.
+    const filter = { location: studio._id };
     if (q) {
       filter.$or = [
         { name: new RegExp(q, 'i') },
@@ -77,15 +119,19 @@ app.get('/', async (req, res, next) => {
     const hasFilter = Boolean(q || category || status);
     const [products, allProducts] = await Promise.all([
       Product.find(filter).sort({ category: 1, name: 1 }).lean(),
-      hasFilter ? Product.find().lean() : null,
+      hasFilter ? Product.find({ location: studio._id }).lean() : null,
     ]);
     const statSource = allProducts || products;
 
-    const holderIds = [...new Set(products.filter((p) => p.assignedTo).map((p) => String(p.assignedTo)))];
+    const holderIds = [
+      ...new Set(products.filter((p) => p.assignedTo).map((p) => String(p.assignedTo))),
+    ];
     const holders = holderIds.length ? await User.find({ _id: { $in: holderIds } }, 'name').lean() : [];
     const holderMap = holders.reduce((acc, h) => ({ ...acc, [String(h._id)]: h.name }), {});
 
-    const isBlocked = (p) => p.condition === 'retired' || p.status === 'maintenance' || p.condition === 'needs-repair';
+    const isBlocked = (p) =>
+      p.condition === 'retired' || p.status === 'maintenance' || p.condition === 'needs-repair';
+
     const counts = {
       total: statSource.length,
       available: statSource.filter((p) => !p.assignedTo && !isBlocked(p)).length,
@@ -108,11 +154,12 @@ app.get('/', async (req, res, next) => {
 
     res.render('public-catalog', {
       layout: false,
+      studio,
       groups,
       holderMap,
       counts,
       categories: CATEGORIES,
-      statuses: STATUSES,
+      statuses: ['available', 'assigned', 'maintenance'],
       query: { q: q || '', category: category || '', status: status || '' },
     });
   } catch (err) {
@@ -123,19 +170,37 @@ app.get('/', async (req, res, next) => {
 app.use('/', authRoutes);
 app.use('/staff', staffRoutes);
 
-// Pending-request count for the sidebar badge, on admin pages only.
-// A failed count must never block a page, so it falls back to 0.
+/**
+ * Sidebar badge counts, on admin pages only.
+ *
+ * These run after `protect` and `withScope` have attached the identity, so
+ * they are scoped exactly like the pages themselves: a location admin's badge
+ * counts their own studio, and the purchase-request badge is never even
+ * calculated for a super admin, who cannot open that page.
+ *
+ * A failed count must never block a page, so both fall back to 0.
+ */
 const AssignmentRequest = require('./models/AssignmentRequest');
 const Booking = require('./models/Booking');
-app.use('/admin', async (req, res, next) => {
+const ProcurementRequest = require('./models/ProcurementRequest');
+const { protect } = require('./middleware/auth');
+const { withScope } = require('./middleware/scope');
+
+app.use('/admin', protect, withScope, async (req, res, next) => {
   try {
+    const scoped = req.scope.filter({ status: 'pending' });
     const [requests, bookings] = await Promise.all([
-      AssignmentRequest.countDocuments({ status: 'pending' }),
-      Booking.countDocuments({ status: 'pending' }),
+      AssignmentRequest.countDocuments(scoped),
+      Booking.countDocuments(scoped),
     ]);
     res.locals.pendingRequestCount = requests + bookings;
+
+    res.locals.pendingPurchaseCount = req.can.viewProcurement
+      ? await ProcurementRequest.countDocuments(req.scope.filter({ status: 'pending' }))
+      : 0;
   } catch (err) {
     res.locals.pendingRequestCount = 0;
+    res.locals.pendingPurchaseCount = 0;
   }
   next();
 });
@@ -171,13 +236,12 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Studio Tracker running on http://localhost:${PORT}`));
 
 // The Telegram bot runs in the same process. No token in .env means no bot,
 // and the admin panel carries on as normal.
 startBot();
 
-// Hands confirmed bookings to their booker on the booked day (runs a pass
-// now, then every 5 minutes — picks up the date change automatically).
+// Hands confirmed bookings to their booker on the booked day
 const { startBookingScheduler } = require('./services/bookingAutoAssign');
 startBookingScheduler();

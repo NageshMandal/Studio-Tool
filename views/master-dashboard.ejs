@@ -1,0 +1,200 @@
+
+<% if (cards.length === 0) { %>
+  <div class="panel">
+    <div class="empty">
+      <h3>No studios yet</h3>
+      <p>Create your first studio, then add its location admin.</p>
+      <a class="btn btn-primary" href="/admin/studios/new"><%- icon('plus', 16) %> Add a studio</a>
+    </div>
+  </div>
+<% } else { %>
+
+  <section class="stat-grid">
+    <div class="stat">
+      <div class="stat-head">
+        <div>
+          <span class="stat-label">Studios</span>
+          <div class="stat-value"><%= cards.length %></div>
+        </div>
+        <span class="stat-ico" style="background: var(--blue-soft); color: var(--blue)"><%- icon('building', 18) %></span>
+      </div>
+      <p class="stat-note">Active locations</p>
+    </div>
+    <div class="stat">
+      <div class="stat-head">
+        <div>
+          <span class="stat-label">Items everywhere</span>
+          <div class="stat-value"><%= totals.items %></div>
+        </div>
+        <span class="stat-ico" style="background: var(--teal-soft); color: var(--teal)"><%- icon('box', 18) %></span>
+      </div>
+      <p class="stat-note"><%= formatMoney(totals.value) %> total value</p>
+    </div>
+    <div class="stat">
+      <div class="stat-head">
+        <div>
+          <span class="stat-label">Staff on record</span>
+          <div class="stat-value"><%= totals.staff %></div>
+        </div>
+        <span class="stat-ico" style="background: var(--purple-soft); color: var(--purple)"><%- icon('people', 18) %></span>
+      </div>
+      <p class="stat-note"><%= totals.assigned %> items currently out</p>
+    </div>
+    <div class="stat">
+      <div class="stat-head">
+        <div>
+          <span class="stat-label">Awaiting a decision</span>
+          <div class="stat-value"><%= totals.pending %></div>
+        </div>
+        <span class="stat-ico" style="background: var(--amber-soft); color: var(--amber)"><%- icon('inbox', 18) %></span>
+      </div>
+      <p class="stat-note">Across all studios</p>
+    </div>
+  </section>
+
+  <p class="section-title">Studios at a glance</p>
+  <section class="studio-summary-grid">
+    <% cards.forEach(function (c) { %>
+      <div class="studio-summary theme-<%= c.theme %>">
+        <div class="studio-summary-head">
+          <span class="art">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 21h18"/><path d="M5 21V6l7-4 7 4v15"/>
+              <path d="M9.5 21v-5h5v5"/><path d="M9 9h.01"/><path d="M15 9h.01"/>
+            </svg>
+          </span>
+          <div>
+            <h3><%= c.name %></h3>
+            <p class="hint" style="font-size: 11.5px"><%= c.code %> · <%= c.city || 'Studio' %></p>
+          </div>
+        </div>
+
+        <div class="studio-summary-figures">
+          <div><span>Total</span><b><%= c.stats.totalItems %></b></div>
+          <div><span>Available</span><b><%= c.stats.availableItems %></b></div>
+          <div><span>Pending</span><b><%= c.stats.pendingTotal %></b></div>
+        </div>
+
+        <div class="foot">
+          <a class="btn btn-accent btn-sm btn-block" href="/admin/studios/open/<%= c._id %>">
+            Open <%- icon('arrow', 14) %>
+          </a>
+          <a class="btn btn-ghost btn-sm" href="/admin/reports?studio=<%= c._id %>">Report</a>
+        </div>
+      </div>
+    <% }); %>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>All studio tracker</h2>
+        <p class="sub">Equipment movements across every location</p>
+      </div>
+      <a class="btn btn-ghost btn-sm" href="/admin/reports/compare">
+        <%- icon('report', 15) %> Compare studios
+      </a>
+    </div>
+
+    <form class="filters" method="GET" action="/admin/master">
+      <label class="field">
+        <span>Date</span>
+        <input type="date" name="date" value="<%= query.date %>" />
+      </label>
+
+      <label class="field">
+        <span>Studio</span>
+        <select name="studio">
+          <option value="">All studios</option>
+          <% studios.forEach(function (s) { %>
+            <option value="<%= s._id %>" <%= query.studio === String(s._id) ? 'selected' : '' %>><%= s.name %></option>
+          <% }); %>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Status</span>
+        <select name="status">
+          <option value="">All status</option>
+          <option value="out" <%= query.status === 'out' ? 'selected' : '' %>>Still out</option>
+          <option value="returned" <%= query.status === 'returned' ? 'selected' : '' %>>Returned</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Staff</span>
+        <select name="staff">
+          <option value="">All staff</option>
+          <% staffList.forEach(function (u) { %>
+            <option value="<%= u._id %>" <%= query.staff === String(u._id) ? 'selected' : '' %>><%= u.name %></option>
+          <% }); %>
+        </select>
+      </label>
+
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">Filter</button>
+        <a class="btn btn-ghost" href="/admin/master">Reset</a>
+      </div>
+    </form>
+
+    <% if (rows.length === 0) { %>
+      <div class="empty">
+        <h3>Nothing matches</h3>
+        <p>No equipment movements were found for those filters.</p>
+      </div>
+    <% } else { %>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Studio</th>
+              <th>Item</th>
+              <th>Assigned to</th>
+              <th>Duration</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% rows.forEach(function (r) { %>
+              <tr>
+                <td><%= formatWhen(r.occupiedAt) %></td>
+                <td><span class="badge badge-grey"><%= r.locationName || '—' %></span></td>
+                <td>
+                  <span class="row-title"><%= r.productName %></span>
+                  <span class="row-sub"><%= r.assetTag %></span>
+                </td>
+                <td>
+                  <span class="person">
+                    <span class="avatar"><%= (r.userName || '?').trim().charAt(0).toUpperCase() %></span>
+                    <%= r.userName %>
+                  </span>
+                </td>
+                <td><%= r.durationMinutes != null ? formatDuration(r.durationMinutes) : formatSince(r.occupiedAt) %></td>
+                <td>
+                  <% if (r.returnedAt) { %>
+                    <span class="badge badge-green">Completed</span>
+                  <% } else { %>
+                    <span class="badge badge-amber">In progress</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-foot">
+        <p class="hint">
+          Showing the <%= rows.length %> most recent movements.
+          <% if (rows.length === 60) { %>Narrow the filters to see further back.<% } %>
+        </p>
+      </div>
+    <% } %>
+  </section>
+
+  <div class="alert alert-info">
+    <b>Note.</b> Purchase requests raised by staff are handled by each studio's own
+    admin and are not shown here — they are private to the studio that raised them.
+  </div>
+<% } %>

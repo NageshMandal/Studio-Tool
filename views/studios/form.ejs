@@ -1,0 +1,78 @@
+
+<section class="panel" style="max-width: 760px">
+  <div class="panel-head">
+    <div>
+      <h2><%= isEdit ? 'Edit studio' : 'New studio' %></h2>
+      <p class="sub">
+        <%= isEdit
+          ? 'The code cannot change — it is already printed on this studio\u2019s asset tags'
+          : 'The code becomes the prefix on every asset tag at this studio' %>
+      </p>
+    </div>
+  </div>
+
+  <div class="panel-body">
+    <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+
+    <form method="POST" action="<%= formAction %>" novalidate>
+      <div class="form-grid">
+        <label class="field">
+          <span>Studio name</span>
+          <input type="text" name="name" value="<%= studio.name || '' %>" placeholder="Patna" required autofocus />
+        </label>
+
+        <label class="field">
+          <span>Code</span>
+          <% if (isEdit) { %>
+            <input type="text" value="<%= studio.code %>" disabled />
+            <span class="help">Fixed — every asset tag here already starts with it.</span>
+          <% } else { %>
+            <input type="text" name="code" value="<%= studio.code || '' %>"
+                   placeholder="PAT" maxlength="5" required style="text-transform: uppercase" />
+            <span class="help">2–5 letters. Tags become PAT-0001, PAT-0002 and so on.</span>
+          <% } %>
+        </label>
+
+        <label class="field">
+          <span>City</span>
+          <input type="text" name="city" value="<%= studio.city || '' %>" placeholder="Patna" />
+        </label>
+
+        <label class="field">
+          <span>Phone</span>
+          <input type="text" name="phone" value="<%= studio.phone || '' %>" placeholder="Reception number" />
+        </label>
+
+        <label class="field full">
+          <span>Address</span>
+          <input type="text" name="address" value="<%= studio.address || '' %>" placeholder="Street, area, pin code" />
+        </label>
+
+        <label class="field full">
+          <span>Accent colour</span>
+          <select name="theme">
+            <% themes.forEach(function (t) { %>
+              <option value="<%= t %>" <%= studio.theme === t ? 'selected' : '' %>>
+                <%= t.charAt(0).toUpperCase() + t.slice(1) %>
+              </option>
+            <% }); %>
+          </select>
+          <span class="help">Used on this studio's card, badges and dashboard so it is recognisable at a glance.</span>
+        </label>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit"><%= isEdit ? 'Save changes' : 'Create studio' %></button>
+        <a class="btn btn-ghost" href="/admin/studios/manage">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+
+<% if (!isEdit) { %>
+  <div class="alert alert-info" style="max-width: 760px">
+    <b>What happens next.</b> A new studio starts empty. Add its
+    <b>location admin</b> from Admin accounts — they will be the only person who
+    can run it, add its items and staff, and handle its purchase requests.
+  </div>
+<% } %>

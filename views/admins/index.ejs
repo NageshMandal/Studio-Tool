@@ -1,75 +1,132 @@
-<% if (message) { %>
-  <div class="alert alert-info"><%= message %></div>
-<% } %>
+<%
+  function rolePill(role) {
+    var cls = role === 'super' ? 'role-super' : (role === 'location_admin' ? 'role-admin' : 'role-manager');
+    return '<span class="role-pill ' + cls + '">' + roleLabels[role] + '</span>';
+  }
+%>
 
 <section class="panel">
   <div class="panel-head">
-    <h2>Admins</h2>
-    <a class="btn btn-primary" href="/admin/admins/new">Add admin</a>
+    <div>
+      <h2>Admin accounts</h2>
+      <p class="sub">
+        <% if (can.isSuper) { %>
+          Every administrator, across all studios
+        <% } else { %>
+          Managers at your studio. Only the super admin can add another location admin.
+        <% } %>
+      </p>
+    </div>
+    <% if (canAdd) { %>
+      <a class="btn btn-primary" href="/admin/admins/new"><%- icon('plus', 15) %> Add admin</a>
+    <% } %>
   </div>
 
-  <table class="table">
-    <thead>
-      <tr>
-        <th>Admin</th>
-        <th>Telegram</th>
-        <th>Status</th>
-        <th>Added by</th>
-        <th>Added</th>
-        <th class="right">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>
-          <span class="row-title"><%= rootName %> <span class="pill pill-power">root</span></span>
-          <span class="row-sub"><%= rootEmail %></span>
-        </td>
-        <td><span class="row-sub">via ADMIN_TELEGRAM_CHAT_ID in .env</span></td>
-        <td><span class="pill pill-active">active</span></td>
-        <td>—</td>
-        <td>—</td>
-        <td class="right"><span class="row-sub">managed in .env</span></td>
-      </tr>
-      <% admins.forEach(function (a) { %>
-        <tr>
-          <td>
-            <span class="row-title"><%= a.name %><% if (me && String(me.id) === String(a._id)) { %> <span class="pill pill-available">you</span><% } %></span>
-            <span class="row-sub"><%= a.email %></span>
-          </td>
-          <td>
-            <% if (a.telegramChatId) { %>
-              <span class="pill pill-available">linked</span>
-              <% if (a.telegramUsername) { %><span class="row-sub">@<%= a.telegramUsername %></span><% } %>
-            <% } else { %>
-              <span class="row-sub">not linked</span>
-            <% } %>
-          </td>
-          <td>
-            <span class="pill pill-<%= a.status %>"><%= a.status %></span>
-          </td>
-          <td><%= a.createdBy || '—' %></td>
-          <td><%= formatDate(a.createdAt) %></td>
-          <td class="right">
-            <% var self = me && String(me.id) === String(a._id); %>
-            <form class="inline pw-form" method="POST" action="/admin/admins/<%= a._id %>/password?_method=PATCH">
-              <input class="pw-input" type="password" name="password" placeholder="New password" minlength="6" required />
-              <button class="btn btn-small" type="submit">Set</button>
-            </form>
-            <% if (!self) { %>
-              <form class="inline" method="POST" action="/admin/admins/<%= a._id %>/status?_method=PATCH">
-                <button class="btn btn-small" type="submit"><%= a.status === 'active' ? 'Deactivate' : 'Activate' %></button>
-              </form>
-              <form class="inline" method="POST" action="/admin/admins/<%= a._id %>?_method=DELETE"
-                    onsubmit="return confirm('Remove <%= a.name %> as an admin?');">
-                <button class="btn btn-small btn-danger" type="submit">Delete</button>
-              </form>
-            <% } %>
-          </td>
-        </tr>
-      <% }); %>
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Name</th><th>Email</th><th>Role</th><th>Studio</th><th>Status</th><th>Last login</th><th></th></tr>
+      </thead>
+      <tbody>
+        <% if (showRoot) { %>
+          <tr style="background: #fbfcfe">
+            <td>
+              <span class="row-title"><%= root.name %> <% if (root.isMe) { %><span class="hint">(you)</span><% } %></span>
+              <span class="row-sub">Defined in the server's .env file</span>
+            </td>
+            <td><%= root.email %></td>
+            <td><%- rolePill('super') %></td>
+            <td><span class="hint">All studios</span></td>
+            <td><span class="badge badge-green">Active</span></td>
+            <td><span class="hint">—</span></td>
+            <td><span class="hint">Not editable here</span></td>
+          </tr>
+        <% } %>
 
-  <p class="hint">Admins sign in to the panel at <code>/login</code> and to the Telegram bot with the same email and password. Once linked to Telegram they receive every request and booking, with approve and decline buttons in the chat.</p>
+        <% admins.forEach(function (a) { %>
+          <tr>
+            <td>
+              <span class="row-title"><%= a.name %> <% if (a.isMe) { %><span class="hint">(you)</span><% } %></span>
+              <% if (a.createdBy) { %><span class="row-sub">Added by <%= a.createdBy %></span><% } %>
+            </td>
+            <td><%= a.email %></td>
+            <td><%- rolePill(a.role) %></td>
+            <td><%= a.location ? a.location.name : 'All studios' %></td>
+            <td>
+              <span class="badge <%= a.status === 'active' ? 'badge-green' : 'badge-grey' %>">
+                <%= a.status === 'active' ? 'Active' : 'Inactive' %>
+              </span>
+            </td>
+            <td><%= a.lastLoginAt ? formatWhen(a.lastLoginAt) : '—' %></td>
+            <td>
+              <% if (a.canManage) { %>
+                <div class="btn-row">
+                  <form method="POST" action="/admin/admins/<%= a._id %>/status?_method=PATCH">
+                    <button class="btn btn-ghost btn-sm" type="submit">
+                      <%= a.status === 'active' ? 'Deactivate' : 'Activate' %>
+                    </button>
+                  </form>
+
+                  <form method="POST" action="/admin/admins/<%= a._id %>/password?_method=PATCH"
+                        onsubmit="var p = prompt('New password for <%= a.name %> (at least 6 characters):'); if (!p) return false; this.password.value = p; return true;">
+                    <input type="hidden" name="password" />
+                    <button class="btn btn-ghost btn-sm" type="submit">Reset password</button>
+                  </form>
+
+                  <form method="POST" action="/admin/admins/<%= a._id %>?_method=DELETE"
+                        onsubmit="return confirm('Remove <%= a.name %>? They will not be able to sign in again.')">
+                    <button class="btn btn-danger btn-sm" type="submit">Remove</button>
+                  </form>
+                </div>
+              <% } else { %>
+                <span class="hint"><%= a.isMe ? 'This is you' : 'Above your level' %></span>
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+
+        <% if (admins.length === 0 && !showRoot) { %>
+          <tr><td colspan="7">
+            <div class="empty">
+              <h3>No admins yet</h3>
+              <p>Add a location manager to help run this studio.</p>
+            </div>
+          </td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>How the roles work</h2></div>
+  <div class="panel-body">
+    <div class="detail-list">
+      <div>
+        <span>Super admin</span>
+        <b>Runs the company</b>
+        <p class="hint" style="margin-top: 5px">
+          Creates studios, appoints one location admin per studio, and can open
+          any studio or the master dashboard. Cannot see staff purchase requests.
+        </p>
+      </div>
+      <div>
+        <span>Location admin</span>
+        <b>Runs one studio</b>
+        <p class="hint" style="margin-top: 5px">
+          Full control of their own studio only — items, staff, approvals,
+          reports — and the only person who decides its purchase requests. May
+          add location managers beneath them.
+        </p>
+      </div>
+      <div>
+        <span>Location manager</span>
+        <b>Second-line help</b>
+        <p class="hint" style="margin-top: 5px">
+          Everything a location admin can do at the same studio, except managing
+          admin accounts, deleting items or people, and approving purchases.
+        </p>
+      </div>
+    </div>
+  </div>
 </section>

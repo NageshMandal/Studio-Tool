@@ -1,0 +1,90 @@
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>All studios · <%= monthLabelText %></h2>
+      <p class="sub">The same month, side by side</p>
+    </div>
+    <div class="month-nav">
+      <a class="btn btn-ghost btn-sm" href="/admin/reports/compare?month=<%= prevMonth %>">‹</a>
+      <span class="current"><%= monthLabelText %></span>
+      <a class="btn btn-ghost btn-sm" href="/admin/reports/compare?month=<%= nextMonth %>">›</a>
+    </div>
+  </div>
+
+  <div class="panel-body">
+    <div class="report-grid">
+      <div class="report-figure"><span>Movements</span><b><%= totals.movements %></b><small>company-wide</small></div>
+      <div class="report-figure"><span>Hours in use</span><b><%= totals.hours %></b><small>total across studios</small></div>
+      <div class="report-figure"><span>Items</span><b><%= totals.items %></b><small><%= formatMoney(totals.value) %> value</small></div>
+      <div class="report-figure"><span>Active staff</span><b><%= totals.staff %></b><small>everywhere</small></div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>Movements by studio</h2></div>
+  <div class="panel-body">
+    <% if (reports.length === 0) { %>
+      <p class="hint">No active studios yet.</p>
+    <% } %>
+    <% reports.forEach(function (r) { %>
+      <div class="bar-row theme-<%= r.studio.theme %>">
+        <span class="label"><%= r.studio.name %></span>
+        <span class="track"><span class="fill" style="width: <%= r.barWidth %>%"></span></span>
+        <span class="value"><%= r.report.summary.movements %></span>
+      </div>
+    <% }); %>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Studio comparison</h2>
+      <p class="sub">Utilisation is the share of each register that actually moved</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Studio</th><th>Items</th><th>Staff</th><th>Movements</th>
+          <th>Hours</th><th>Items used</th><th>Utilisation</th><th>Still out</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% reports.forEach(function (r) { %>
+          <tr>
+            <td>
+              <span class="row-title"><%= r.studio.name %></span>
+              <span class="row-sub"><%= r.studio.code %></span>
+            </td>
+            <td><%= r.report.inventory.total %></td>
+            <td><%= r.report.summary.activeStaff %></td>
+            <td><b><%= r.report.summary.movements %></b></td>
+            <td><%= r.report.summary.totalHours %>h</td>
+            <td><%= r.report.summary.distinctItems %></td>
+            <td>
+              <span class="badge <%= r.report.summary.utilisation >= 50 ? 'badge-green'
+                : (r.report.summary.utilisation >= 20 ? 'badge-amber' : 'badge-grey') %>">
+                <%= r.report.summary.utilisation %>%
+              </span>
+            </td>
+            <td><%= r.report.summary.stillOut %></td>
+            <td>
+              <a class="btn btn-ghost btn-sm"
+                 href="/admin/reports?studio=<%= r.studio._id %>&month=<%= monthKey %>">Detail</a>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="alert alert-info">
+  <b>Reading utilisation.</b> A low percentage against a large register usually
+  means kit nobody is touching — worth reviewing before that studio's next
+  purchase request.
+</div>

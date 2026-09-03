@@ -7,8 +7,8 @@ const { unreadCount } = require('../services/notifications');
 
 // The old staff sign-in page now lives at the single /login form
 router.get('/login', (req, res) => {
-  const error = req.query.error ? `?error=${encodeURIComponent(req.query.error)}` : '';
-  res.redirect(`/login${error}`);
+  const error = req.query.error ? `&error=${encodeURIComponent(req.query.error)}` : '';
+  res.redirect(`/login?role=staff${error}`);
 });
 router.post('/login', staff.login);
 router.post('/logout', staff.logout);
@@ -24,6 +24,12 @@ router.use(async (req, res, next) => {
 
 router.get('/', staff.portal);
 router.get('/inventory', staff.inventory);
+
+// "We don't have this — can we get one?"
+router.get('/purchase-requests', staff.purchaseRequests);
+router.post('/purchase-requests', staff.createPurchaseRequest);
+router.post('/purchase-requests/:id/cancel', staff.cancelPurchaseRequest);
+
 router.post('/occupy/:id', staff.occupy);
 router.post('/return/:id', staff.returnItem);
 router.post('/book/:id', staff.book);

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Studio Tracker · Public shelf</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand" style="padding: 0">
+      <span class="brand-mark">ST</span>
+      <span class="brand-name" style="color: var(--text)">Studio Tracker</span>
+    </div>
+    <a class="btn btn-primary btn-sm" href="/login">Sign in</a>
+  </header>
+
+  <div class="select-wrap">
+    <div class="select-head">
+      <h1>Which studio?</h1>
+      <p>Pick a location to see what is on its shelf right now</p>
+    </div>
+
+    <% if (studios.length === 0) { %>
+      <div class="panel">
+        <div class="empty">
+          <h3>No studios are set up yet</h3>
+          <p>Sign in as the admin to create the first one.</p>
+          <a class="btn btn-primary" href="/login">Sign in</a>
+        </div>
+      </div>
+    <% } else { %>
+      <div class="studio-grid">
+        <% studios.forEach(function (s) { %>
+          <div class="studio-card theme-<%= s.theme %>">
+            <div class="art">
+              <svg viewBox="0 0 160 112" width="150" height="104" fill="none" stroke="currentColor"
+                   stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="44" y="40" width="72" height="56" rx="3"/><path d="M44 40 80 16l36 24"/>
+                <path d="M66 96V70h28v26"/><path d="M56 54h12"/><path d="M92 54h12"/>
+                <path d="M30 96h100v8H30Z"/>
+              </svg>
+            </div>
+            <h3><%= s.name %></h3>
+            <p class="sub"><%= s.city || s.name %> Studio</p>
+            <div class="facts"><div><b><%= s.itemCount %></b> items</div></div>
+            <a class="btn btn-accent btn-block" href="/shelf/<%= s._id %>">View the shelf</a>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+  </div>
+</body>
+</html>

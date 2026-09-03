@@ -1,21 +1,21 @@
 const Product = require('../models/Product');
 const User = require('../models/User');
-const UsageLog = require('../models/UsageLog');
+const Location = require('../models/Location');
 const AssignmentRequest = require('../models/AssignmentRequest');
 const NextClaim = require('../models/NextClaim');
 const { syncAssignment, releaseProduct, occupyProduct } = require('../services/occupancy');
-const { dayRange } = require('../utils/format');
+const { CATEGORIES } = require('../models/Product');
 
-const CATEGORIES = [
-  'Camera',
-  'Lens',
-  'Memory',
-  'Audio',
-  'Tripod',
-  'Accessory',
-  'Mic ID',
-  'Other',
-];
+/**
+ * The item register, always seen through one studio.
+ *
+ * Every query here goes through `req.scope.filter()`, and every lookup by id
+ * is re-checked with `req.scope.owns()`. That second check is the one that
+ * matters: without it, an admin at Ranchi could edit a Patna camera simply by
+ * pasting its id into the URL, and the filtered list page would never reveal
+ * that they had.
+ */
+
 const CONDITIONS = ['new', 'good', 'needs-repair', 'retired'];
 const STATUSES = ['available', 'assigned', 'maintenance'];
 
@@ -27,61 +27,21 @@ const cleanBody = (body) => ({
   serialNumber: body.serialNumber,
   condition: body.condition,
   status: body.status,
-  location: body.location,
+  storageArea: body.storageArea,
   purchaseDate: body.purchaseDate || null,
   price: Number(body.price) || 0,
   imageUrl: body.imageUrl,
   notes: body.notes,
 });
 
-// GET /admin/dashboard
-exports.dashboard = async (req, res, next) => {
-  try {
-    const { start, end } = dayRange();
-
-    const [totalItems, totalUsers, assignedItems, repairItems, valueAgg, recent, outNow, takenToday, returnedToday, linkedUsers] =
-      await Promise.all([
-        Product.countDocuments(),
-        User.countDocuments(),
-        Product.countDocuments({ status: 'assigned' }),
-        Product.countDocuments({ condition: 'needs-repair' }),
-        Product.aggregate([
-          { $group: { _id: null, value: { $sum: '$price' } } },
-        ]),
-        Product.find().sort({ createdAt: -1 }).limit(5).populate('assignedTo', 'name'),
-        Product.find({ assignedTo: { $ne: null } }).sort({ occupiedAt: 1 }).limit(8).populate('assignedTo', 'name'),
-        UsageLog.countDocuments({ occupiedAt: { $gte: start, $lt: end } }),
-        UsageLog.countDocuments({ returnedAt: { $gte: start, $lt: end } }),
-        User.countDocuments({ telegramChatId: { $ne: null } }),
-      ]);
-
-    res.render('dashboard', {
-      title: 'Dashboard',
-      active: 'dashboard',
-      stats: {
-        totalItems,
-        totalUsers,
-        assignedItems,
-        repairItems,
-        totalValue: valueAgg[0] ? valueAgg[0].value : 0,
-        takenToday,
-        returnedToday,
-        linkedUsers,
-      },
-      recent,
-      outNow,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
+const backTo = (message) => `/admin/products?message=${encodeURIComponent(message)}`;
 
 // GET /admin/products
 exports.list = async (req, res, next) => {
   try {
-    const { q, category, status } = req.query;
-    const filter = {};
+    const { q, category, status, condition } = req.query;
 
+    const filter = req.scope.filter();
     if (q) {
       filter.$or = [
         { name: new RegExp(q, 'i') },
@@ -92,18 +52,27 @@ exports.list = async (req, res, next) => {
     }
     if (category) filter.category = category;
     if (status) filter.status = status;
+    if (condition) filter.condition = condition;
 
     const products = await Product.find(filter)
       .sort({ createdAt: -1 })
-      .populate('assignedTo', 'name email');
+      .populate('assignedTo', 'name email')
+      .populate('location', 'name code theme')
+      .lean();
 
     res.render('products/index', {
-      title: 'Inventory',
+      title: 'Items',
       active: 'products',
       products,
       categories: CATEGORIES,
       statuses: STATUSES,
-      query: { q: q || '', category: category || '', status: status || '' },
+      conditions: CONDITIONS,
+      query: {
+        q: q || '',
+        category: category || '',
+        status: status || '',
+        condition: condition || '',
+      },
       message: req.query.message || null,
     });
   } catch (err) {
@@ -114,7 +83,8 @@ exports.list = async (req, res, next) => {
 // GET /admin/products/new
 exports.newForm = async (req, res, next) => {
   try {
-    const users = await User.find({ status: 'active' }).sort({ name: 1 });
+    const users = await User.find(req.scope.filter({ status: 'active' })).sort({ name: 1 }).lean();
+
     res.render('products/form', {
       title: 'Add item',
       active: 'products',
@@ -123,6 +93,7 @@ exports.newForm = async (req, res, next) => {
       categories: CATEGORIES,
       conditions: CONDITIONS,
       statuses: STATUSES,
+      studio: req.scope.active,
       formAction: '/admin/products',
       isEdit: false,
       error: null,
@@ -133,17 +104,26 @@ exports.newForm = async (req, res, next) => {
 };
 
 // POST /admin/products
-exports.create = async (req, res, next) => {
+exports.create = async (req, res) => {
   try {
-    const product = await Product.create(cleanBody(req.body));
+    // The studio is taken from the session, never from the form. A posted
+    // location field is ignored, so an item cannot be filed into a studio
+    // the person signed in to is not allowed to touch.
+    const product = await Product.create({
+      ...cleanBody(req.body),
+      location: req.scope.activeId,
+    });
 
     if (req.body.assignedTo) {
-      const holder = await User.findById(req.body.assignedTo);
-      if (holder) await occupyProduct({ product, user: holder, reason: req.body.reason, source: 'admin' });
+      const holder = await User.findOne(req.scope.filter({ _id: req.body.assignedTo }));
+      if (holder) {
+        await occupyProduct({ product, user: holder, reason: req.body.reason, source: 'admin' });
+      }
     }
-    res.redirect('/admin/products?message=Item added');
+
+    res.redirect(backTo(`${product.name} added as ${product.assetTag}`));
   } catch (err) {
-    const users = await User.find({ status: 'active' }).sort({ name: 1 });
+    const users = await User.find(req.scope.filter({ status: 'active' })).sort({ name: 1 }).lean();
     res.status(400).render('products/form', {
       title: 'Add item',
       active: 'products',
@@ -152,6 +132,7 @@ exports.create = async (req, res, next) => {
       categories: CATEGORIES,
       conditions: CONDITIONS,
       statuses: STATUSES,
+      studio: req.scope.active,
       formAction: '/admin/products',
       isEdit: false,
       error: err.message,
@@ -162,11 +143,11 @@ exports.create = async (req, res, next) => {
 // GET /admin/products/:id/edit
 exports.editForm = async (req, res, next) => {
   try {
-    const [product, users] = await Promise.all([
-      Product.findById(req.params.id),
-      User.find({ status: 'active' }).sort({ name: 1 }),
-    ]);
-    if (!product) return res.redirect('/admin/products?message=Item not found');
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.redirect(backTo('Item not found'));
+    if (!req.scope.owns(product)) return res.redirect(backTo('That item belongs to another studio'));
+
+    const users = await User.find(req.scope.filter({ status: 'active' })).sort({ name: 1 }).lean();
 
     res.render('products/form', {
       title: `Edit ${product.name}`,
@@ -176,9 +157,11 @@ exports.editForm = async (req, res, next) => {
       categories: CATEGORIES,
       conditions: CONDITIONS,
       statuses: STATUSES,
+      studio: req.scope.active,
       formAction: `/admin/products/${product._id}?_method=PUT`,
       isEdit: true,
-      error: null,
+      error: req.query.error || null,
+      message: req.query.message || null,
     });
   } catch (err) {
     next(err);
@@ -189,15 +172,16 @@ exports.editForm = async (req, res, next) => {
 exports.update = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) return res.redirect('/admin/products?message=Item not found');
+    if (!product) return res.redirect(backTo('Item not found'));
+    if (!req.scope.owns(product)) return res.redirect(backTo('That item belongs to another studio'));
 
     const previousAssignee = product.assignedTo;
     Object.assign(product, cleanBody(req.body));
     await product.save();
 
-    // Handing an item to someone (or taking it back) from the admin form
-    // writes the same usage-log entries the bot would write.
-    const users = await User.find({ status: 'active' });
+    // Handing an item over from the admin form writes the same usage-log
+    // entries the bot would write, so the register never has gaps.
+    const users = await User.find(req.scope.filter({ status: 'active' }));
     await syncAssignment({
       product,
       previousAssignee,
@@ -207,9 +191,9 @@ exports.update = async (req, res, next) => {
       source: 'admin',
     });
 
-    res.redirect('/admin/products?message=Item updated');
+    res.redirect(backTo(`${product.name} updated`));
   } catch (err) {
-    const users = await User.find({ status: 'active' }).sort({ name: 1 });
+    const users = await User.find(req.scope.filter({ status: 'active' })).sort({ name: 1 }).lean();
     res.status(400).render('products/form', {
       title: 'Edit item',
       active: 'products',
@@ -218,6 +202,7 @@ exports.update = async (req, res, next) => {
       categories: CATEGORIES,
       conditions: CONDITIONS,
       statuses: STATUSES,
+      studio: req.scope.active,
       formAction: `/admin/products/${req.params.id}?_method=PUT`,
       isEdit: true,
       error: err.message,
@@ -229,24 +214,71 @@ exports.update = async (req, res, next) => {
 exports.remove = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (product && product.assignedTo) {
+    if (!product) return res.redirect(backTo('Item not found'));
+    if (!req.scope.owns(product)) return res.redirect(backTo('That item belongs to another studio'));
+
+    if (product.assignedTo) {
       await releaseProduct({ product, source: 'admin', note: 'Item removed from the register' });
     }
+
     // Any open requests for it can no longer be honoured
     await AssignmentRequest.updateMany(
-      { product: req.params.id, status: 'pending' },
+      { product: product._id, status: 'pending' },
       { status: 'cancelled', decidedAt: new Date(), decisionNote: 'Item removed from the register' }
     );
     await NextClaim.updateMany(
-      { product: req.params.id, status: 'waiting' },
+      { product: product._id, status: 'waiting' },
       { status: 'cancelled', decidedAt: new Date(), decisionNote: 'Item removed from the register' }
     );
-    await Product.findByIdAndDelete(req.params.id);
-    res.redirect('/admin/products?message=Item removed');
+
+    await Product.findByIdAndDelete(product._id);
+    res.redirect(backTo(`${product.name} removed`));
   } catch (err) {
     next(err);
   }
 };
-// Shared with the staff portal so both filter forms show the same options
+
+/**
+ * GET /admin/tracker — the "Studio Tracker" table from the design:
+ * today's movements at this studio, in one place, with the status of each.
+ */
+exports.tracker = async (req, res, next) => {
+  try {
+    const UsageLog = require('../models/UsageLog');
+    const { dayRange, todayKey } = require('../utils/format');
+
+    const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : todayKey();
+    const { start, end } = dayRange(dateKey);
+    const { staff, status } = req.query;
+
+    const filter = req.scope.filter({
+      occupiedAt: { $lt: end },
+      $or: [{ returnedAt: null }, { returnedAt: { $gte: start } }],
+    });
+    if (staff) filter.user = staff;
+    if (status === 'out') filter.returnedAt = null;
+    if (status === 'returned') filter.returnedAt = { $ne: null };
+
+    const [rows, staffList] = await Promise.all([
+      UsageLog.find(filter).sort({ occupiedAt: -1 }).lean(),
+      User.find(req.scope.filter({ status: 'active' }), 'name').sort({ name: 1 }).lean(),
+    ]);
+
+    res.render('tracker', {
+      title: 'Studio tracker',
+      active: 'tracker',
+      rows,
+      staffList,
+      date: dateKey,
+      today: todayKey(),
+      query: { staff: staff || '', status: status || '' },
+      message: req.query.message || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.CATEGORIES = CATEGORIES;
 exports.STATUSES = STATUSES;
+exports.CONDITIONS = CONDITIONS;

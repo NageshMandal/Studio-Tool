@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title><%= title %> · Studio Inventory</title>
+  <title><%= title %> · Studio Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
@@ -15,20 +15,46 @@
 
     <main class="main">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">Studio inventory</p>
-          <h1 class="page-title"><%= title %></h1>
-        </div>
-        <div class="topbar-right">
-          <div class="whoami">
-            <span class="whoami-name"><%= admin ? admin.name : 'Admin' %></span>
-            <span class="whoami-mail"><%= admin ? admin.email : '' %></span>
+        <div class="topbar-title">
+          <% if (activeStudio) { %>
+            <span style="color: var(--muted)"><%- icon('pin', 18) %></span>
+          <% } else if (can.isSuper) { %>
+            <span style="color: var(--amber)"><%- icon('crown', 18) %></span>
+          <% } %>
+          <div>
+            <h1 class="page-title"><%= title %></h1>
+            <% if (typeof subtitle !== 'undefined' && subtitle) { %>
+              <p class="page-sub"><%= subtitle %></p>
+            <% } %>
           </div>
-          <a class="btn btn-ghost" href="/logout">Sign out</a>
+        </div>
+
+        <div class="topbar-right">
+          <span class="date-chip">
+            <%- icon('log', 15) %>
+            <%= new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) %>
+          </span>
+
+          <% if (can.switchStudio && activeStudio) { %>
+            <a class="btn btn-ghost btn-sm" href="/admin/studios">Switch studio</a>
+          <% } %>
+
+          <div class="whoami">
+            <span class="avatar"><%= (admin.name || 'A').trim().charAt(0).toUpperCase() %></span>
+            <span>
+              <span class="whoami-name"><%= admin.name %></span>
+              <span class="whoami-role">
+                <%= can.isSuper ? 'Super admin' : (can.isLocationAdmin ? 'Location admin' : 'Location manager') %>
+              </span>
+            </span>
+          </div>
         </div>
       </header>
 
       <div class="content">
+        <% if (typeof message !== 'undefined' && message) { %>
+          <div class="alert alert-info"><%= message %></div>
+        <% } %>
         <%- body %>
       </div>
     </main>

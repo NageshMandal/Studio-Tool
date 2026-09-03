@@ -1,0 +1,140 @@
+<%
+  function urgencyBadge(u) {
+    var map = { urgent: 'badge-red', high: 'badge-amber', normal: 'badge-blue', low: 'badge-grey' };
+    return '<span class="badge ' + (map[u] || 'badge-grey') + '">' + u + '</span>';
+  }
+  function statusBadge(s) {
+    var map = {
+      pending: 'badge-amber', approved: 'badge-blue', ordered: 'badge-purple',
+      received: 'badge-green', rejected: 'badge-red', cancelled: 'badge-grey'
+    };
+    return '<span class="badge ' + (map[s] || 'badge-grey') + '">' + statusLabels[s] + '</span>';
+  }
+%>
+
+<div class="alert alert-info">
+  <b>These stay inside <%= activeStudio.name %>.</b> Purchase requests are raised
+  by your own staff and decided by you. They are not visible from the super admin
+  account, and no other studio can see them.
+</div>
+
+<section class="stat-grid">
+  <div class="stat tone-amber">
+    <div class="stat-head">
+      <div><span class="stat-label">Waiting on you</span><div class="stat-value"><%= counts.pending %></div></div>
+      <span class="stat-ico"><%- icon('clock', 18) %></span>
+    </div>
+  </div>
+  <div class="stat tone-blue">
+    <div class="stat-head">
+      <div><span class="stat-label">Approved</span><div class="stat-value"><%= counts.approved %></div></div>
+      <span class="stat-ico"><%- icon('check', 18) %></span>
+    </div>
+  </div>
+  <div class="stat">
+    <div class="stat-head">
+      <div><span class="stat-label">Ordered</span><div class="stat-value"><%= counts.ordered %></div></div>
+      <span class="stat-ico" style="background: var(--purple-soft); color: var(--purple)"><%- icon('cart', 18) %></span>
+    </div>
+  </div>
+  <div class="stat tone-green">
+    <div class="stat-head">
+      <div><span class="stat-label">Received</span><div class="stat-value"><%= counts.received %></div></div>
+      <span class="stat-ico"><%- icon('box', 18) %></span>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Purchase requests</h2>
+      <p class="sub">Items your staff have asked the studio to buy</p>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <a class="tab <%= query.status === '' ? 'is-active' : '' %>" href="/admin/purchase-requests">
+      All <span class="count"><%= counts.all %></span>
+    </a>
+    <% statuses.forEach(function (s) { %>
+      <a class="tab <%= query.status === s ? 'is-active' : '' %>" href="/admin/purchase-requests?status=<%= s %>">
+        <%= statusLabels[s] %>
+      </a>
+    <% }); %>
+  </div>
+
+  <form class="filters" method="GET" action="/admin/purchase-requests">
+    <input type="hidden" name="status" value="<%= query.status %>" />
+    <label class="field">
+      <span>Search</span>
+      <input type="search" name="q" value="<%= query.q %>" placeholder="Item, reference or person" />
+    </label>
+    <label class="field">
+      <span>Urgency</span>
+      <select name="urgency">
+        <option value="">Any urgency</option>
+        <% urgencies.forEach(function (u) { %>
+          <option value="<%= u %>" <%= query.urgency === u ? 'selected' : '' %>><%= u %></option>
+        <% }); %>
+      </select>
+    </label>
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Filter</button>
+      <a class="btn btn-ghost" href="/admin/purchase-requests">Reset</a>
+    </div>
+  </form>
+
+  <div class="panel-body">
+    <% if (requests.length === 0) { %>
+      <div class="empty">
+        <h3>Nothing here</h3>
+        <p>
+          When somebody at <%= activeStudio.name %> needs kit the studio does not
+          have, their request will land here.
+        </p>
+      </div>
+    <% } else { %>
+      <% requests.forEach(function (r) { %>
+        <div class="request-card <%= r.urgency === 'urgent' ? 'is-urgent' : (r.urgency === 'high' ? 'is-high' : '') %>">
+          <div class="request-head">
+            <div>
+              <h3>
+                <a href="/admin/purchase-requests/<%= r._id %>"><%= r.itemName %></a>
+                <% if (r.quantity > 1) { %><span class="hint">× <%= r.quantity %></span><% } %>
+              </h3>
+              <div class="request-meta">
+                <span class="asset-tag"><%= r.reference %></span>
+                <span><%- icon('user', 13) %> <%= r.requesterName %>
+                  <% if (r.requesterRole === 'sales') { %>
+                    <span class="role-pill role-sales">Sales</span>
+                  <% } %>
+                </span>
+                <span><%= formatWhen(r.createdAt) %></span>
+                <% if (r.neededBy) { %><span>Needed by <%= formatDay(r.neededBy) %></span><% } %>
+              </div>
+            </div>
+            <div style="display: flex; gap: 7px; align-items: flex-start">
+              <%- urgencyBadge(r.urgency) %>
+              <%- statusBadge(r.status) %>
+            </div>
+          </div>
+
+          <p class="request-body"><%= r.reason.length > 220 ? r.reason.slice(0, 220) + '…' : r.reason %></p>
+
+          <div class="request-actions">
+            <a class="btn btn-ghost btn-sm" href="/admin/purchase-requests/<%= r._id %>">Open</a>
+            <% if (r.purchaseUrl) { %>
+              <a class="btn btn-ghost btn-sm" href="<%= r.purchaseUrl %>" target="_blank" rel="noopener noreferrer">
+                <%- icon('link', 14) %> Buy link
+              </a>
+            <% } %>
+            <% if (r.estimatedPrice) { %>
+              <span class="hint">Estimated <%= formatMoney(r.estimatedPrice) %> each</span>
+            <% } %>
+          </div>
+        </div>
+      <% }); %>
+    <% } %>
+  </div>
+</section>

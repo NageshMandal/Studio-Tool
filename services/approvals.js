@@ -19,11 +19,32 @@ const { bookingSpan } = require('./booking');
  * throws for a business-rule failure, only for genuine server errors.
  */
 
+/**
+ * The studio guard.
+ *
+ * Both roads into this service — the panel and the Telegram buttons — pass
+ * the deciding admin's studio. A location admin therefore cannot decide
+ * another branch's request even if they somehow get hold of its id, and a
+ * super admin (who has no studio of their own) passes null and is allowed
+ * through everywhere.
+ *
+ * Returning a refusal rather than throwing keeps it consistent with the rest
+ * of the file: business-rule failures come back as { ok, message }.
+ */
+const WRONG_STUDIO = {
+  ok: false,
+  message: 'That request belongs to another studio',
+};
+
+const outOfScope = (doc, scopeLocation) =>
+  Boolean(scopeLocation) && String(doc.location) !== String(scopeLocation);
+
 /* ---------------- occupy requests ---------------- */
 
-async function approveRequest(requestId, decidedBy) {
+async function approveRequest(requestId, decidedBy, scopeLocation = null) {
   const request = await AssignmentRequest.findOne({ _id: requestId, status: 'pending' });
   if (!request) return { ok: false, message: 'That request has already been dealt with' };
+  if (outOfScope(request, scopeLocation)) return WRONG_STUDIO;
 
   const product = await Product.findById(request.product);
   const user = await User.findById(request.user);
@@ -81,9 +102,10 @@ async function approveRequest(requestId, decidedBy) {
   return { ok: true, message: `Approved — ${product.name} is now with ${user.name}`, request };
 }
 
-async function rejectRequest(requestId, decidedBy, note) {
+async function rejectRequest(requestId, decidedBy, note, scopeLocation = null) {
   const request = await AssignmentRequest.findOne({ _id: requestId, status: 'pending' });
   if (!request) return { ok: false, message: 'That request has already been dealt with' };
+  if (outOfScope(request, scopeLocation)) return WRONG_STUDIO;
 
   const cleanNote = (note || '').trim().slice(0, 200) || null;
 
@@ -116,9 +138,10 @@ async function rejectRequest(requestId, decidedBy, note) {
 
 /* ---------------- bookings ---------------- */
 
-async function approveBooking(bookingId, decidedBy) {
+async function approveBooking(bookingId, decidedBy, scopeLocation = null) {
   const booking = await Booking.findOne({ _id: bookingId, status: 'pending' });
   if (!booking) return { ok: false, message: 'That booking has already been dealt with' };
+  if (outOfScope(booking, scopeLocation)) return WRONG_STUDIO;
 
   const user = await User.findById(booking.user);
   const product = await Product.findById(booking.product);
@@ -217,9 +240,10 @@ async function approveBooking(bookingId, decidedBy) {
   };
 }
 
-async function rejectBooking(bookingId, decidedBy, note) {
+async function rejectBooking(bookingId, decidedBy, note, scopeLocation = null) {
   const booking = await Booking.findOne({ _id: bookingId, status: 'pending' });
   if (!booking) return { ok: false, message: 'That booking has already been dealt with' };
+  if (outOfScope(booking, scopeLocation)) return WRONG_STUDIO;
 
   const cleanNote = (note || '').trim().slice(0, 200) || null;
 

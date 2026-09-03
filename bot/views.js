@@ -237,7 +237,10 @@ function itemDetail(item, holderName, viewer, pendingRequest = null, nextClaim =
   if (item.brand || item.model) {
     details.push(`Model: ${escapeHtml([item.brand, item.model].filter(Boolean).join(' '))}`);
   }
-  if (item.location) details.push(`Kept at: ${escapeHtml(item.location)}`);
+  // `storageArea` is the shelf or rack inside the studio. `location` is now
+  // the studio itself (an id), so printing that here would show a raw
+  // ObjectId to the person holding the camera.
+  if (item.storageArea) details.push(`Kept at: ${escapeHtml(item.storageArea)}`);
   if (item.serialNumber) details.push(`Serial: ${escapeHtml(item.serialNumber)}`);
   if (item.notes) details.push(`Note: ${escapeHtml(item.notes)}`);
   details.push('');

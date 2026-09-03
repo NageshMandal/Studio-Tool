@@ -1,93 +1,105 @@
-<% if (message) { %>
-  <div class="alert alert-info"><%= message %></div>
-<% } %>
 
 <section class="panel">
   <div class="panel-head">
-    <form class="filters" method="GET" action="/admin/products">
-      <input type="search" name="q" value="<%= query.q %>" placeholder="Search name, tag, serial…" />
+    <div>
+      <h2>Items at <%= activeStudio.name %></h2>
+      <p class="sub"><%= products.length %> item<%= products.length === 1 ? '' : 's' %> shown</p>
+    </div>
+    <a class="btn btn-primary" href="/admin/products/new"><%- icon('plus', 15) %> Add new item</a>
+  </div>
+
+  <form class="filters" method="GET" action="/admin/products">
+    <label class="field">
+      <span>Search</span>
+      <input type="search" name="q" value="<%= query.q %>" placeholder="Name, tag, brand or serial" />
+    </label>
+    <label class="field">
+      <span>Category</span>
       <select name="category">
         <option value="">All categories</option>
         <% categories.forEach(function (c) { %>
           <option value="<%= c %>" <%= query.category === c ? 'selected' : '' %>><%= c %></option>
         <% }); %>
       </select>
+    </label>
+    <label class="field">
+      <span>Status</span>
       <select name="status">
-        <option value="">Any status</option>
+        <option value="">All status</option>
         <% statuses.forEach(function (s) { %>
           <option value="<%= s %>" <%= query.status === s ? 'selected' : '' %>><%= s %></option>
         <% }); %>
       </select>
-      <button class="btn btn-ghost" type="submit">Filter</button>
+    </label>
+    <label class="field">
+      <span>Condition</span>
+      <select name="condition">
+        <option value="">Any condition</option>
+        <% conditions.forEach(function (c) { %>
+          <option value="<%= c %>" <%= query.condition === c ? 'selected' : '' %>><%= c %></option>
+        <% }); %>
+      </select>
+    </label>
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Filter</button>
       <a class="btn btn-ghost" href="/admin/products">Reset</a>
-    </form>
-
-    <a class="btn btn-primary" href="/admin/products/new">Add item</a>
-  </div>
+    </div>
+  </form>
 
   <% if (products.length === 0) { %>
     <div class="empty">
-      <p>No items match this view.</p>
-      <a class="btn btn-primary" href="/admin/products/new">Add item</a>
+      <h3>No items match</h3>
+      <p>Either nothing is on this studio's register yet, or the filters are too narrow.</p>
+      <a class="btn btn-primary" href="/admin/products/new">Add an item</a>
     </div>
   <% } else { %>
-    <table class="table">
-      <thead>
-        <tr>
-          <th></th>
-          <th>Asset tag</th>
-          <th>Item</th>
-          <th>Category</th>
-          <th>Condition</th>
-          <th>Availability</th>
-          <th>Since</th>
-          <th>Location</th>
-          <th class="right">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% products.forEach(function (item) { %>
-          <tr>
-            <td class="thumb-cell">
-              <%- include('../partials/thumb', { thumbUrl: item.imageUrl, thumbName: item.name }) %>
-            </td>
-            <td><span class="asset-tag"><%= item.assetTag %></span></td>
-            <td>
-              <a class="row-title" href="/admin/products/<%= item._id %>/edit"><%= item.name %></a>
-              <span class="row-sub"><%= [item.brand, item.model].filter(Boolean).join(' · ') %></span>
-            </td>
-            <td><%= item.category %></td>
-            <td><span class="pill pill-<%= item.condition %>"><%= item.condition.replace('-', ' ') %></span></td>
-            <td>
-              <% if (item.status === 'maintenance') { %>
-                <span class="pill pill-maintenance">in maintenance</span>
-              <% } else if (item.assignedTo) { %>
-                <span class="pill pill-assigned">occupied</span>
-                <span class="row-sub">by <%= item.assignedTo.name %></span>
-                <% if (item.occupyReason) { %>
-                  <span class="row-sub reason">📝 <%= item.occupyReason %></span>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th></th><th>Asset tag</th><th>Item</th><th>Category</th><th>Held by</th><th>Condition</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          <% products.forEach(function (p) { %>
+            <tr>
+              <td class="thumb-cell">
+                <%- include('../partials/thumb', { thumbUrl: p.imageUrl, thumbName: p.name }) %>
+              </td>
+              <td><span class="asset-tag"><%= p.assetTag %></span></td>
+              <td>
+                <a class="row-title" href="/admin/products/<%= p._id %>/edit"><%= p.name %></a>
+                <span class="row-sub"><%= p.brand || '' %> <%= p.model || '' %></span>
+              </td>
+              <td><%= p.category %></td>
+              <td><%= p.assignedTo ? p.assignedTo.name : '—' %></td>
+              <td>
+                <span class="badge <%= p.condition === 'needs-repair' || p.condition === 'retired' ? 'badge-red' : 'badge-grey' %>">
+                  <%= p.condition %>
+                </span>
+              </td>
+              <td>
+                <% if (p.assignedTo) { %>
+                  <span class="badge badge-amber">Out</span>
+                <% } else if (p.status === 'maintenance') { %>
+                  <span class="badge badge-red">Maintenance</span>
+                <% } else { %>
+                  <span class="badge badge-green">Available</span>
                 <% } %>
-              <% } else { %>
-                <span class="pill pill-available">available</span>
-              <% } %>
-            </td>
-            <td>
-              <% if (item.occupiedAt) { %>
-                <%= formatWhen(item.occupiedAt) %>
-                <span class="row-sub"><%= formatSince(item.occupiedAt) %> ago</span>
-              <% } else { %>—<% } %>
-            </td>
-            <td><%= item.location || '—' %></td>
-            <td class="right nowrap">
-              <a class="btn btn-small" href="/admin/products/<%= item._id %>/edit">Edit</a>
-              <form class="inline" method="POST" action="/admin/products/<%= item._id %>?_method=DELETE"
-                    onsubmit="return confirm('Remove <%= item.name %> from the register?');">
-                <button class="btn btn-small btn-danger" type="submit">Delete</button>
-              </form>
-            </td>
-          </tr>
-        <% }); %>
-      </tbody>
-    </table>
+              </td>
+              <td>
+                <div class="btn-row">
+                  <a class="btn btn-ghost btn-sm" href="/admin/products/<%= p._id %>/edit">Edit</a>
+                  <% if (can.deleteItems) { %>
+                    <form method="POST" action="/admin/products/<%= p._id %>?_method=DELETE"
+                          onsubmit="return confirm('Remove <%= p.name %> from the register? This cannot be undone.')">
+                      <button class="btn btn-danger btn-sm" type="submit">Delete</button>
+                    </form>
+                  <% } %>
+                </div>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
   <% } %>
 </section>

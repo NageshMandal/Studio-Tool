@@ -1,8 +1,15 @@
 <div class="auth-card error-card">
-  <div class="auth-form">
-    <p class="eyebrow">Error <%= code %></p>
-    <h1><%= code === 404 ? 'Not found' : 'Server error' %></h1>
-    <p class="hint"><%= message %></p>
-    <a class="btn btn-primary" href="/admin/dashboard">Back to dashboard</a>
+  <div class="auth-form" style="text-align: center">
+    <p class="hint" style="font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase">
+      Error <%= code %>
+    </p>
+    <h1 style="margin: 8px 0 10px">
+      <%= code === 404 ? 'Page not found' : (code === 403 ? 'Not allowed' : 'Something broke') %>
+    </h1>
+    <p class="hint" style="margin-bottom: 22px"><%= message %></p>
+    <div class="btn-row" style="justify-content: center">
+      <a class="btn btn-primary" href="/admin">Back to the panel</a>
+      <a class="btn btn-ghost" href="/logout">Log out</a>
+    </div>
   </div>
 </div>

@@ -1,6 +1,19 @@
 const mongoose = require('mongoose');
 
 const Counter = require('./Counter');
+const Location = require('./Location');
+
+const CATEGORIES = [
+  'Camera',
+  'Lens',
+  'Memory',
+  'Audio',
+  'Tripod',
+  'Lighting',
+  'Accessory',
+  'Mic ID',
+  'Other',
+];
 
 const productSchema = new mongoose.Schema(
   {
@@ -9,24 +22,33 @@ const productSchema = new mongoose.Schema(
       required: [true, 'Name is required'],
       trim: true,
     },
+
+    /**
+     * The studio that owns this item. An item belongs to one studio and is
+     * invisible to every other one — this field is what makes that true.
+     */
+    location: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Location',
+      required: [true, 'Pick the studio this item belongs to'],
+      index: true,
+    },
+
+    /**
+     * Printed on the case: PAT-0001, RAN-0001, KOL-0001 …
+     * Prefixed with the studio code so a tag alone tells you where the item
+     * lives, and so two studios never fight over the same number.
+     */
     assetTag: {
       type: String,
       unique: true,
       uppercase: true,
       trim: true,
     },
+
     category: {
       type: String,
-      enum: [
-        'Camera',
-        'Lens',
-        'Memory',
-        'Audio',
-        'Tripod',
-        'Accessory',
-        'Mic ID',
-        'Other',
-      ],
+      enum: CATEGORIES,
       default: 'Other',
     },
     brand: { type: String, trim: true },
@@ -42,9 +64,13 @@ const productSchema = new mongoose.Schema(
       enum: ['available', 'assigned', 'maintenance'],
       default: 'available',
     },
-    location: { type: String, trim: true, default: 'Main studio' },
+
+    // Where inside the studio it is kept — shelf, rack, cupboard
+    storageArea: { type: String, trim: true, default: 'Main store' },
+
     purchaseDate: { type: Date },
     price: { type: Number, min: 0, default: 0 },
+
     assignedTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -64,27 +90,43 @@ const productSchema = new mongoose.Schema(
     },
     imageUrl: { type: String, trim: true },
     notes: { type: String, trim: true },
+
+    /**
+     * Set when this item was added as the result of an approved staff
+     * purchase request, so the request can show "this is now on the shelf".
+     */
+    fromProcurement: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ProcurementRequest',
+      default: null,
+    },
   },
   { timestamps: true }
 );
 
-// Give every instrument a printable asset tag: STU-0001, STU-0002 ...
+// One item cannot be in two studios, and lookups are always studio-first
+productSchema.index({ location: 1, category: 1, name: 1 });
+productSchema.index({ location: 1, status: 1 });
+
+// Give every item a printable asset tag, numbered per studio
 productSchema.pre('save', async function (next) {
   if (this.assetTag) return next();
   try {
+    const studio = await Location.findById(this.location).lean();
+    const prefix = studio ? studio.code : 'STU';
     const counter = await Counter.findByIdAndUpdate(
-      'assetTag',
+      `assetTag:${prefix}`,
       { $inc: { seq: 1 } },
       { new: true, upsert: true }
     );
-    this.assetTag = `STU-${String(counter.seq).padStart(4, '0')}`;
+    this.assetTag = `${prefix}-${String(counter.seq).padStart(4, '0')}`;
     next();
   } catch (err) {
     next(err);
   }
 });
 
-// An instrument with nobody holding it is available again
+// An item with nobody holding it is available again
 productSchema.pre('save', function (next) {
   if (!this.assignedTo && this.status === 'assigned') this.status = 'available';
   if (this.assignedTo && this.status === 'available') this.status = 'assigned';
@@ -92,3 +134,4 @@ productSchema.pre('save', function (next) {
 });
 
 module.exports = mongoose.model('Product', productSchema);
+module.exports.CATEGORIES = CATEGORIES;

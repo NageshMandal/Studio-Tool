@@ -1,0 +1,208 @@
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2><%= studio.name %> · monthly usage report</h2>
+      <p class="sub">Built from the usage log, so a past month keeps reading the same</p>
+    </div>
+
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+      <% if (canCompare && studios.length > 1) { %>
+        <form method="GET" action="/admin/reports">
+          <input type="hidden" name="month" value="<%= report.monthKey %>" />
+          <select name="studio" onchange="this.form.submit()">
+            <% studios.forEach(function (s) { %>
+              <option value="<%= s._id %>" <%= String(s._id) === String(studio._id) ? 'selected' : '' %>>
+                <%= s.name %>
+              </option>
+            <% }); %>
+          </select>
+        </form>
+      <% } %>
+
+      <div class="month-nav">
+        <a class="btn btn-ghost btn-sm"
+           href="/admin/reports?month=<%= prevMonth %><%= canCompare ? '&studio=' + studio._id : '' %>">‹</a>
+        <span class="current"><%= report.monthLabel %></span>
+        <a class="btn btn-ghost btn-sm <%= report.monthKey >= thisMonth ? 'is-disabled' : '' %>"
+           href="/admin/reports?month=<%= nextMonth %><%= canCompare ? '&studio=' + studio._id : '' %>">›</a>
+      </div>
+
+      <a class="btn btn-ghost btn-sm"
+         href="/admin/reports/export.csv?month=<%= report.monthKey %><%= canCompare ? '&studio=' + studio._id : '' %>">
+        <%- icon('download', 15) %> CSV
+      </a>
+      <% if (canCompare) { %>
+        <a class="btn btn-ghost btn-sm" href="/admin/reports/compare?month=<%= report.monthKey %>">Compare all</a>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="panel-body">
+    <div class="report-grid">
+      <div class="report-figure">
+        <span>Movements</span><b><%= report.summary.movements %></b>
+        <small>times equipment went out</small>
+      </div>
+      <div class="report-figure">
+        <span>Returns</span><b><%= report.summary.returns %></b>
+        <small><%= report.summary.stillOut %> still out</small>
+      </div>
+      <div class="report-figure">
+        <span>Hours in use</span><b><%= report.summary.totalHours %></b>
+        <small>average <%= report.summary.avgHours %>h per movement</small>
+      </div>
+      <div class="report-figure">
+        <span>Items used</span><b><%= report.summary.distinctItems %></b>
+        <small>of <%= report.inventory.total %> on the register</small>
+      </div>
+      <div class="report-figure">
+        <span>Utilisation</span><b><%= report.summary.utilisation %>%</b>
+        <small>of the register touched</small>
+      </div>
+      <div class="report-figure">
+        <span>Active staff</span><b><%= report.summary.activeStaff %></b>
+        <small>at this studio</small>
+      </div>
+    </div>
+  </div>
+</section>
+
+<% if (report.daily.length) { %>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Activity by day</h2>
+      <p class="sub">Movements started each day</p>
+    </div>
+    <div class="panel-body">
+      <div class="spark">
+        <% report.daily.forEach(function (d) { %>
+          <span class="bar" style="height: <%= Math.max(6, d.height) %>%"
+                title="<%= d.day %>: <%= d.count %> movement<%= d.count === 1 ? '' : 's' %>"></span>
+        <% }); %>
+      </div>
+      <p class="hint">Hover a bar for the exact day and count.</p>
+    </div>
+  </section>
+<% } %>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 20px">
+  <section class="panel">
+    <div class="panel-head"><h2>Busiest people</h2></div>
+    <div class="panel-body">
+      <% if (report.byPerson.length === 0) { %>
+        <p class="hint">Nobody took anything out this month.</p>
+      <% } else { %>
+        <% var peakP = report.byPerson[0].movements || 1; %>
+        <% report.byPerson.forEach(function (p) { %>
+          <div class="bar-row">
+            <span class="label"><%= p.name %></span>
+            <span class="track"><span class="fill" style="width: <%= Math.round((p.movements / peakP) * 100) %>%"></span></span>
+            <span class="value"><%= p.movements %> · <%= p.hours %>h</span>
+          </div>
+        <% }); %>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Most-used items</h2></div>
+    <div class="panel-body">
+      <% if (report.byItem.length === 0) { %>
+        <p class="hint">No equipment moved this month.</p>
+      <% } else { %>
+        <% var peakI = report.byItem[0].movements || 1; %>
+        <% report.byItem.forEach(function (i) { %>
+          <div class="bar-row">
+            <span class="label" title="<%= i.name %>"><%= i.name %></span>
+            <span class="track"><span class="fill" style="width: <%= Math.round((i.movements / peakI) * 100) %>%"></span></span>
+            <span class="value"><%= i.movements %> · <%= i.hours %>h</span>
+          </div>
+        <% }); %>
+      <% } %>
+    </div>
+  </section>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px">
+  <section class="panel">
+    <div class="panel-head"><h2>By category</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Category</th><th>Movements</th><th>Hours</th></tr></thead>
+        <tbody>
+          <% if (report.byCategory.length === 0) { %>
+            <tr><td colspan="3"><p class="hint">Nothing to show.</p></td></tr>
+          <% } %>
+          <% report.byCategory.forEach(function (c) { %>
+            <tr><td><%= c.category %></td><td><%= c.movements %></td><td><%= c.hours %>h</td></tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Approvals this month</h2></div>
+    <div class="panel-body">
+      <div class="detail-list">
+        <div><span>Equipment requests</span><b><%= report.requests.total %></b>
+          <p class="hint"><%= report.requests.approved || 0 %> approved · <%= report.requests.rejected || 0 %> rejected</p>
+        </div>
+        <div><span>Bookings</span><b><%= report.bookings.total %></b>
+          <p class="hint"><%= report.bookings.confirmed || 0 %> confirmed · <%= report.bookings.declined || 0 %> declined</p>
+        </div>
+        <% if (can.viewProcurement) { %>
+          <div><span>Purchase requests</span><b><%= report.procurement.total %></b>
+            <p class="hint">
+              <%= report.procurement.approved %> approved · <%= report.procurement.received %> received
+            </p>
+          </div>
+          <div><span>Approved spend</span><b><%= formatMoney(report.procurement.spend) %></b>
+            <p class="hint">Budget signed off this month</p>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </section>
+</div>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Movement detail</h2>
+      <p class="sub">Every loan that overlapped <%= report.monthLabel %></p>
+    </div>
+  </div>
+
+  <% if (report.logs.length === 0) { %>
+    <div class="empty"><p>No equipment movements in this month.</p></div>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Asset tag</th><th>Item</th><th>Person</th><th>Taken</th><th>Returned</th><th>Duration</th><th>Reason</th></tr>
+        </thead>
+        <tbody>
+          <% report.logs.forEach(function (l) { %>
+            <tr>
+              <td><span class="asset-tag"><%= l.assetTag %></span></td>
+              <td><span class="row-title"><%= l.productName %></span></td>
+              <td><%= l.userName %></td>
+              <td><%= formatWhen(l.occupiedAt) %></td>
+              <td>
+                <% if (l.returnedAt) { %><%= formatWhen(l.returnedAt) %>
+                <% } else { %><span class="badge badge-amber">Still out</span><% } %>
+              </td>
+              <td><%= l.durationMinutes != null ? formatDuration(l.durationMinutes) : formatSince(l.occupiedAt) %></td>
+              <td><%= l.reason || '—' %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-foot">
+      <p class="hint">Showing up to 100 rows. Export the CSV for the complete month.</p>
+    </div>
+  <% } %>
+</section>

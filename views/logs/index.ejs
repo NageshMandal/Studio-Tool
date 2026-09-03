@@ -1,97 +1,99 @@
-<section class="daybar">
-  <a class="btn btn-ghost" href="/admin/logs?date=<%= prevDate %>">← <%= prevDate %></a>
-  <form class="filters" method="GET" action="/admin/logs">
-    <input type="date" name="date" value="<%= date %>" max="<%= maxDate %>" />
-    <input type="search" name="q" value="<%= query.q %>" placeholder="Item, tag or person…" />
-    <button class="btn btn-ghost" type="submit">Show</button>
-    <a class="btn btn-ghost" href="/admin/logs">Today</a>
-  </form>
-  <% if (date < maxDate) { %>
-    <a class="btn btn-ghost" href="/admin/logs?date=<%= nextDate %>"><%= nextDate %> →</a>
-  <% } else { %>
-    <span class="btn btn-ghost is-disabled">Latest</span>
-  <% } %>
-</section>
 
 <section class="stat-grid">
-  <div class="stat">
-    <span class="stat-label">Taken out</span>
-    <span class="stat-value"><%= summary.startedToday %></span>
-    <span class="stat-note"><%= isToday ? 'so far today' : 'on this day' %></span>
+  <div class="stat tone-blue">
+    <div class="stat-head">
+      <div><span class="stat-label">Taken out</span><div class="stat-value"><%= summary.startedToday %></div></div>
+      <span class="stat-ico"><%- icon('box', 18) %></span>
+    </div>
+  </div>
+  <div class="stat tone-green">
+    <div class="stat-head">
+      <div><span class="stat-label">Returned</span><div class="stat-value"><%= summary.returnedToday %></div></div>
+      <span class="stat-ico"><%- icon('check', 18) %></span>
+    </div>
+  </div>
+  <div class="stat tone-amber">
+    <div class="stat-head">
+      <div><span class="stat-label">Still out</span><div class="stat-value"><%= summary.stillOut %></div></div>
+      <span class="stat-ico"><%- icon('clock', 18) %></span>
+    </div>
   </div>
   <div class="stat">
-    <span class="stat-label">Returned</span>
-    <span class="stat-value"><%= summary.returnedToday %></span>
-    <span class="stat-note">Submitted back</span>
-  </div>
-  <div class="stat">
-    <span class="stat-label">Still out</span>
-    <span class="stat-value"><%= summary.stillOut %></span>
-    <span class="stat-note">Not returned yet</span>
-  </div>
-  <div class="stat">
-    <span class="stat-label">Time in use</span>
-    <span class="stat-value"><%= summary.totalHours %>h</span>
-    <span class="stat-note">
-      <% if (summary.busiest) { %>Busiest: <%= summary.busiest.name %><% } else { %>No activity<% } %>
-    </span>
+    <div class="stat-head">
+      <div><span class="stat-label">Hours logged</span><div class="stat-value"><%= summary.totalHours %></div></div>
+      <span class="stat-ico" style="background: var(--purple-soft); color: var(--purple)"><%- icon('log', 18) %></span>
+    </div>
+    <% if (summary.busiest) { %>
+      <p class="stat-note">Busiest: <%= summary.busiest.name %> (<%= summary.busiest.count %>)</p>
+    <% } %>
   </div>
 </section>
 
 <section class="panel">
   <div class="panel-head">
-    <h2>Movements on <%= date %></h2>
+    <div>
+      <h2>Usage log</h2>
+      <p class="sub"><%= formatDate(date) %><%= isToday ? ' · today' : '' %> at <%= activeStudio.name %></p>
+    </div>
+    <div class="month-nav">
+      <a class="btn btn-ghost btn-sm" href="/admin/logs?date=<%= prevDate %>">‹</a>
+      <span class="current"><%= formatDate(date) %></span>
+      <a class="btn btn-ghost btn-sm" href="/admin/logs?date=<%= nextDate %>">›</a>
+    </div>
   </div>
+
+  <form class="filters" method="GET" action="/admin/logs">
+    <input type="hidden" name="date" value="<%= date %>" />
+    <label class="field">
+      <span>Search</span>
+      <input type="search" name="q" value="<%= query.q %>" placeholder="Item, tag or person" />
+    </label>
+    <label class="field">
+      <span>Staff</span>
+      <select name="staff">
+        <option value="">All staff</option>
+        <% staffList.forEach(function (u) { %>
+          <option value="<%= u._id %>" <%= query.staff === String(u._id) ? 'selected' : '' %>><%= u.name %></option>
+        <% }); %>
+      </select>
+    </label>
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Filter</button>
+      <a class="btn btn-ghost" href="/admin/logs?date=<%= date %>">Reset</a>
+    </div>
+  </form>
 
   <% if (logs.length === 0) { %>
     <div class="empty">
-      <p>Nothing was taken out or returned on this day.</p>
+      <h3>Nothing logged</h3>
+      <p>No equipment moved on this day.</p>
     </div>
   <% } else { %>
-    <table class="table">
-      <thead>
-        <tr>
-          <th></th>
-          <th>Item</th>
-          <th>Person</th>
-          <th>Taken for</th>
-          <th>Taken at</th>
-          <th>Returned at</th>
-          <th>Held for</th>
-          <th>Via</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% logs.forEach(function (log) { %>
-          <tr class="<%= log.returnedAt ? '' : 'row-open' %>">
-            <td class="thumb-cell">
-              <%- include('../partials/thumb', { thumbUrl: log.imageUrl, thumbName: log.productName }) %>
-            </td>
-            <td>
-              <span class="row-title"><%= log.productName %></span>
-              <span class="row-sub"><span class="asset-tag"><%= log.assetTag %></span></span>
-            </td>
-            <td><%= log.userName %></td>
-            <td><%= log.reason || '—' %></td>
-            <td><%= formatWhen(log.occupiedAt) %></td>
-            <td>
-              <% if (log.returnedAt) { %>
-                <%= formatWhen(log.returnedAt) %>
-              <% } else { %>
-                <span class="pill pill-assigned">still out</span>
-              <% } %>
-            </td>
-            <td>
-              <% if (log.returnedAt) { %>
-                <%= formatDuration(log.durationMinutes) %>
-              <% } else { %>
-                <%= formatSince(log.occupiedAt) %> so far
-              <% } %>
-            </td>
-            <td><span class="pill"><%= log.source %></span></td>
-          </tr>
-        <% }); %>
-      </tbody>
-    </table>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th></th><th>Asset tag</th><th>Item</th><th>Person</th><th>Taken</th><th>Returned</th><th>Held</th><th>Reason</th></tr>
+        </thead>
+        <tbody>
+          <% logs.forEach(function (l) { %>
+            <tr>
+              <td class="thumb-cell">
+                <%- include('../partials/thumb', { thumbUrl: l.imageUrl, thumbName: l.productName }) %>
+              </td>
+              <td><span class="asset-tag"><%= l.assetTag %></span></td>
+              <td><span class="row-title"><%= l.productName %></span></td>
+              <td><%= l.userName %></td>
+              <td><%= formatWhen(l.occupiedAt) %></td>
+              <td>
+                <% if (l.returnedAt) { %><%= formatWhen(l.returnedAt) %>
+                <% } else { %><span class="badge badge-amber">Still out</span><% } %>
+              </td>
+              <td><%= l.durationMinutes != null ? formatDuration(l.durationMinutes) : formatSince(l.occupiedAt) %></td>
+              <td><%= l.reason || '—' %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
   <% } %>
 </section>

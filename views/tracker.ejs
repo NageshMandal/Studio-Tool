@@ -1,0 +1,79 @@
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Studio tracker</h2>
+      <p class="sub">Every movement at <%= activeStudio.name %> on the chosen day</p>
+    </div>
+    <a class="btn btn-primary btn-sm" href="/admin/products/new"><%- icon('plus', 15) %> Add new item</a>
+  </div>
+
+  <form class="filters" method="GET" action="/admin/tracker">
+    <label class="field">
+      <span>Date</span>
+      <input type="date" name="date" value="<%= date %>" max="<%= today %>" />
+    </label>
+    <label class="field">
+      <span>Staff</span>
+      <select name="staff">
+        <option value="">All staff</option>
+        <% staffList.forEach(function (u) { %>
+          <option value="<%= u._id %>" <%= query.staff === String(u._id) ? 'selected' : '' %>><%= u.name %></option>
+        <% }); %>
+      </select>
+    </label>
+    <label class="field">
+      <span>Status</span>
+      <select name="status">
+        <option value="">All status</option>
+        <option value="out" <%= query.status === 'out' ? 'selected' : '' %>>Still out</option>
+        <option value="returned" <%= query.status === 'returned' ? 'selected' : '' %>>Returned</option>
+      </select>
+    </label>
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Filter</button>
+      <a class="btn btn-ghost" href="/admin/tracker">Reset</a>
+    </div>
+  </form>
+
+  <% if (rows.length === 0) { %>
+    <div class="empty">
+      <h3>Nothing on <%= formatDate(date) %></h3>
+      <p>No equipment movements matched those filters.</p>
+    </div>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Date</th><th>Item</th><th>Assigned to</th><th>Reason</th><th>Duration</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <% rows.forEach(function (r) { %>
+            <tr>
+              <td><%= formatWhen(r.occupiedAt) %></td>
+              <td>
+                <span class="row-title"><%= r.productName %></span>
+                <span class="row-sub"><%= r.assetTag %></span>
+              </td>
+              <td>
+                <span class="person">
+                  <span class="avatar"><%= (r.userName || '?').trim().charAt(0).toUpperCase() %></span>
+                  <%= r.userName %>
+                </span>
+              </td>
+              <td><%= r.reason || '—' %></td>
+              <td><%= r.durationMinutes != null ? formatDuration(r.durationMinutes) : formatSince(r.occupiedAt) %></td>
+              <td>
+                <% if (r.returnedAt) { %>
+                  <span class="badge badge-green">Completed</span>
+                <% } else { %>
+                  <span class="badge badge-amber">In progress</span>
+                <% } %>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>

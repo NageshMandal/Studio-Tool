@@ -1,264 +1,194 @@
-<% if (message) { %>
-  <div class="alert alert-info"><%= message %></div>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Equipment requests</h2>
+      <p class="sub">People at <%= activeStudio.name %> asking to take something out now</p>
+    </div>
+    <span class="badge <%= pending.length ? 'badge-amber' : 'badge-green' %>">
+      <%= pending.length %> waiting
+    </span>
+  </div>
+
+  <div class="panel-body">
+    <% if (pending.length === 0) { %>
+      <div class="empty"><p>No equipment requests are waiting.</p></div>
+    <% } else { %>
+      <% pending.forEach(function (r) { %>
+        <div class="request-card">
+          <div class="request-head">
+            <div>
+              <h3><%= r.productName %></h3>
+              <div class="request-meta">
+                <span class="asset-tag"><%= r.assetTag %></span>
+                <span><%- icon('user', 13) %> <%= r.userName %></span>
+                <span><%= formatWhen(r.createdAt) %></span>
+              </div>
+            </div>
+          </div>
+
+          <% if (r.reason) { %><p class="request-body"><%= r.reason %></p><% } %>
+
+          <% if (r.productGone) { %>
+            <div class="alert alert-error" style="margin: 12px 0 0">That item is no longer on the register.</div>
+          <% } else if (r.productBusy) { %>
+            <div class="alert alert-warn" style="margin: 12px 0 0">Somebody else already has this item.</div>
+          <% } else if (r.productBlocked) { %>
+            <div class="alert alert-warn" style="margin: 12px 0 0">This item is in maintenance or retired.</div>
+          <% } %>
+
+          <div class="request-actions">
+            <form method="POST" action="/admin/requests/<%= r._id %>/approve">
+              <button class="btn btn-ok btn-sm" type="submit"><%- icon('check', 14) %> Approve</button>
+            </form>
+            <form method="POST" action="/admin/requests/<%= r._id %>/reject"
+                  onsubmit="var n = prompt('Reason for declining (optional):'); if (n === null) return false; this.note.value = n; return true;">
+              <input type="hidden" name="note" />
+              <button class="btn btn-danger btn-sm" type="submit">Decline</button>
+            </form>
+          </div>
+        </div>
+      <% }); %>
+    <% } %>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Bookings to confirm</h2>
+      <p class="sub">Advance reservations waiting on you</p>
+    </div>
+    <span class="badge <%= pendingBookings.length ? 'badge-amber' : 'badge-green' %>">
+      <%= pendingBookings.length %> waiting
+    </span>
+  </div>
+
+  <div class="panel-body">
+    <% if (pendingBookings.length === 0) { %>
+      <div class="empty"><p>No bookings are waiting.</p></div>
+    <% } else { %>
+      <% pendingBookings.forEach(function (b) { %>
+        <div class="request-card">
+          <div class="request-head">
+            <div>
+              <h3><%= b.productName %></h3>
+              <div class="request-meta">
+                <span class="asset-tag"><%= b.assetTag %></span>
+                <span><%= b.userName %></span>
+                <span><%= formatDay(b.bookedFor) %><%= b.pickupTime ? ' ' + b.pickupTime : '' %></span>
+              </div>
+            </div>
+          </div>
+
+          <% if (b.reason) { %><p class="request-body"><%= b.reason %></p><% } %>
+
+          <% if (b.awaitingReturn) { %>
+            <div class="alert alert-info" style="margin: 12px 0 0">
+              The item is still out. The holder has been asked to submit it.
+            </div>
+          <% } %>
+          <% if (b.dayTaken) { %>
+            <div class="alert alert-warn" style="margin: 12px 0 0">That day is already confirmed for someone else.</div>
+          <% } %>
+          <% if (b.dayPassed) { %>
+            <div class="alert alert-warn" style="margin: 12px 0 0">That day has already passed.</div>
+          <% } %>
+
+          <div class="request-actions">
+            <form method="POST" action="/admin/requests/bookings/<%= b._id %>/approve">
+              <button class="btn btn-ok btn-sm" type="submit">Confirm</button>
+            </form>
+            <form method="POST" action="/admin/requests/bookings/<%= b._id %>/reject"
+                  onsubmit="var n = prompt('Reason for declining (optional):'); if (n === null) return false; this.note.value = n; return true;">
+              <input type="hidden" name="note" />
+              <button class="btn btn-danger btn-sm" type="submit">Decline</button>
+            </form>
+          </div>
+        </div>
+      <% }); %>
+    <% } %>
+  </div>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px">
+  <section class="panel">
+    <div class="panel-head"><h2>Upcoming confirmed bookings</h2></div>
+    <div class="table-wrap">
+      <% if (upcomingBookings.length === 0) { %>
+        <div class="empty"><p>Nothing booked ahead.</p></div>
+      <% } else { %>
+        <table class="table">
+          <thead><tr><th>Item</th><th>Person</th><th>Day</th><th></th></tr></thead>
+          <tbody>
+            <% upcomingBookings.forEach(function (b) { %>
+              <tr>
+                <td><span class="row-title"><%= b.productName %></span><span class="row-sub"><%= b.assetTag %></span></td>
+                <td><%= b.userName %></td>
+                <td><%= formatDay(b.bookedFor) %></td>
+                <td>
+                  <form method="POST" action="/admin/requests/bookings/<%= b._id %>/cancel"
+                        onsubmit="return confirm('Cancel this confirmed booking?')">
+                    <button class="btn btn-ghost btn-sm" type="submit">Cancel</button>
+                  </form>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Next in line</h2>
+        <p class="sub">Holders decide these, not you — shown for awareness</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <% if (waitingClaims.length === 0) { %>
+        <div class="empty"><p>Nobody is queueing.</p></div>
+      <% } else { %>
+        <table class="table">
+          <thead><tr><th>Item</th><th>Waiting</th><th>Held by</th></tr></thead>
+          <tbody>
+            <% waitingClaims.forEach(function (c) { %>
+              <tr>
+                <td><span class="row-title"><%= c.productName %></span></td>
+                <td><%= c.userName %></td>
+                <td><%= c.holderName || '—' %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      <% } %>
+    </div>
+  </section>
+</div>
+
+<% if (decided.length) { %>
+  <section class="panel">
+    <div class="panel-head"><h2>Recently decided</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Person</th><th>Outcome</th><th>By</th><th>When</th></tr></thead>
+        <tbody>
+          <% decided.forEach(function (r) { %>
+            <tr>
+              <td><span class="row-title"><%= r.productName %></span><span class="row-sub"><%= r.assetTag %></span></td>
+              <td><%= r.userName %></td>
+              <td>
+                <span class="badge <%= r.status === 'approved' ? 'badge-green' : 'badge-grey' %>"><%= r.status %></span>
+                <% if (r.decisionNote) { %><span class="row-sub"><%= r.decisionNote %></span><% } %>
+              </td>
+              <td><%= r.decidedBy || '—' %></td>
+              <td><%= formatWhen(r.decidedAt) %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </section>
 <% } %>
-
-<section class="panel">
-  <div class="panel-head">
-    <h2>Waiting for approval (<%= pending.length %>)</h2>
-  </div>
-
-  <% if (pending.length === 0) { %>
-    <div class="empty">
-      <p>No pending requests. When a normal user asks for an item from the Telegram bot, it will show up here.</p>
-    </div>
-  <% } else { %>
-    <table class="table">
-      <thead>
-        <tr>
-          <th></th>
-          <th>Item</th>
-          <th>Requested by</th>
-          <th>Reason</th>
-          <th>Asked</th>
-          <th class="right">Decision</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% pending.forEach(function (r) { %>
-          <tr>
-            <td class="thumb-cell">
-              <%- include('../partials/thumb', { thumbUrl: r.imageUrl, thumbName: r.productName }) %>
-            </td>
-            <td>
-              <span class="row-title"><%= r.productName %></span>
-              <span class="row-sub"><span class="asset-tag"><%= r.assetTag || '—' %></span></span>
-              <% if (r.productGone) { %>
-                <span class="pill pill-retired">item deleted</span>
-              <% } else if (r.productBusy) { %>
-                <span class="pill pill-assigned">now with someone else</span>
-              <% } else if (r.productBlocked) { %>
-                <span class="pill pill-maintenance">not available</span>
-              <% } %>
-            </td>
-            <td><%= r.userName %></td>
-            <td><%= r.reason || '—' %></td>
-            <td><%= formatWhen(r.createdAt) %><span class="row-sub"><%= formatSince(r.createdAt) %> ago</span></td>
-            <td class="right">
-              <form method="POST" action="/admin/requests/<%= r._id %>/approve" style="display:inline">
-                <button class="btn btn-primary btn-small" type="submit"
-                        <%= (r.productGone || r.productBusy || r.productBlocked) ? 'disabled' : '' %>>
-                  Approve
-                </button>
-              </form>
-              <form method="POST" action="/admin/requests/<%= r._id %>/reject" style="display:inline"
-                    onsubmit="var n = prompt('Reason for declining (optional):'); if (n === null) return false; this.note.value = n; return true;">
-                <input type="hidden" name="note" value="" />
-                <button class="btn btn-ghost btn-small" type="submit">Decline</button>
-              </form>
-            </td>
-          </tr>
-        <% }); %>
-      </tbody>
-    </table>
-  <% } %>
-</section>
-
-<section class="panel">
-  <div class="panel-head">
-    <h2>Recent decisions</h2>
-  </div>
-
-  <% if (decided.length === 0) { %>
-    <div class="empty"><p>Nothing decided yet.</p></div>
-  <% } else { %>
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Item</th>
-          <th>Requested by</th>
-          <th>Reason</th>
-          <th>Outcome</th>
-          <th>Decided</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% decided.forEach(function (r) { %>
-          <tr>
-            <td>
-              <span class="row-title"><%= r.productName %></span>
-              <span class="row-sub"><span class="asset-tag"><%= r.assetTag || '—' %></span></span>
-            </td>
-            <td><%= r.userName %></td>
-            <td><%= r.reason || '—' %></td>
-            <td>
-              <% if (r.status === 'approved') { %>
-                <span class="pill pill-available">approved</span>
-              <% } else if (r.status === 'rejected') { %>
-                <span class="pill pill-retired">declined</span>
-              <% } else { %>
-                <span class="pill pill-maintenance">cancelled</span>
-              <% } %>
-              <% if (r.decisionNote) { %><span class="row-sub"><%= r.decisionNote %></span><% } %>
-              <% if (r.decidedBy) { %><span class="row-sub">by <%= r.decidedBy %></span><% } %>
-            </td>
-            <td><%= formatWhen(r.decidedAt || r.updatedAt) %></td>
-          </tr>
-        <% }); %>
-      </tbody>
-    </table>
-  <% } %>
-</section>
-
-<section class="panel">
-  <div class="panel-head">
-    <h2>Bookings waiting for approval (<%= pendingBookings.length %>)</h2>
-  </div>
-
-  <% if (pendingBookings.length === 0) { %>
-    <div class="empty">
-      <p>No pending bookings. When a normal user books an item for a date, it will show up here.</p>
-    </div>
-  <% } else { %>
-    <table class="table">
-      <thead>
-        <tr>
-          <th></th>
-          <th>Item</th>
-          <th>Booked by</th>
-          <th>Pickup / drop</th>
-          <th>Reason</th>
-          <th>Asked</th>
-          <th class="right">Decision</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% pendingBookings.forEach(function (b) { %>
-          <tr>
-            <td class="thumb-cell">
-              <%- include('../partials/thumb', { thumbUrl: b.imageUrl, thumbName: b.productName }) %>
-            </td>
-            <td>
-              <span class="row-title"><%= b.productName %></span>
-              <span class="row-sub"><span class="asset-tag"><%= b.assetTag || '—' %></span></span>
-              <% if (b.dayPassed) { %>
-                <span class="pill pill-retired">day passed</span>
-              <% } else if (b.dayTaken) { %>
-                <span class="pill pill-maintenance">day already booked</span>
-              <% } %>
-              <% if (b.awaitingReturn) { %>
-                <span class="pill pill-assigned">waiting for holder to submit</span>
-              <% } %>
-            </td>
-            <td><%= b.userName %></td>
-            <td>
-              <strong><%= formatDay(b.bookedFor) %></strong><%= b.pickupTime ? ' · ' + b.pickupTime : '' %>
-              <span class="row-sub"><%= b.bookedFor %></span>
-              <% if (b.dropDate || b.dropTime) { %>
-                <span class="row-sub">↩️ drop: <%= b.dropDate ? formatDay(b.dropDate) : formatDay(b.bookedFor) %><%= b.dropTime ? ' ' + b.dropTime : '' %></span>
-              <% } %>
-            </td>
-            <td><%= b.reason || '—' %></td>
-            <td><%= formatWhen(b.createdAt) %></td>
-            <td class="right">
-              <form method="POST" action="/admin/requests/bookings/<%= b._id %>/approve" style="display:inline">
-                <button class="btn btn-primary btn-small" type="submit"
-                        <%= (b.dayPassed || b.dayTaken) ? 'disabled' : '' %>>
-                  Approve
-                </button>
-              </form>
-              <form method="POST" action="/admin/requests/bookings/<%= b._id %>/reject" style="display:inline"
-                    onsubmit="var n = prompt('Reason for declining (optional):'); if (n === null) return false; this.note.value = n; return true;">
-                <input type="hidden" name="note" value="" />
-                <button class="btn btn-ghost btn-small" type="submit">Decline</button>
-              </form>
-            </td>
-          </tr>
-        <% }); %>
-      </tbody>
-    </table>
-  <% } %>
-</section>
-
-<section class="panel">
-  <div class="panel-head">
-    <h2>Upcoming confirmed bookings (<%= upcomingBookings.length %>)</h2>
-  </div>
-
-  <% if (upcomingBookings.length === 0) { %>
-    <div class="empty"><p>Nothing booked ahead.</p></div>
-  <% } else { %>
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Item</th>
-          <th>Booked by</th>
-          <th>Pickup / drop</th>
-          <th>Reason</th>
-          <th class="right"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <% upcomingBookings.forEach(function (b) { %>
-          <tr>
-            <td>
-              <span class="row-title"><%= b.productName %></span>
-              <span class="row-sub"><span class="asset-tag"><%= b.assetTag || '—' %></span></span>
-            </td>
-            <td><%= b.userName %></td>
-            <td>
-              <strong><%= formatDay(b.bookedFor) %></strong><%= b.pickupTime ? ' · ' + b.pickupTime : '' %>
-              <span class="row-sub"><%= b.bookedFor %></span>
-              <% if (b.dropDate || b.dropTime) { %>
-                <span class="row-sub">↩️ drop: <%= b.dropDate ? formatDay(b.dropDate) : formatDay(b.bookedFor) %><%= b.dropTime ? ' ' + b.dropTime : '' %></span>
-              <% } %>
-            </td>
-            <td><%= b.reason || '—' %></td>
-            <td class="right">
-              <form method="POST" action="/admin/requests/bookings/<%= b._id %>/cancel" style="display:inline"
-                    onsubmit="return confirm('Cancel this confirmed booking? The person will be notified.');">
-                <button class="btn btn-ghost btn-small" type="submit">Cancel</button>
-              </form>
-            </td>
-          </tr>
-        <% }); %>
-      </tbody>
-    </table>
-  <% } %>
-</section>
-
-<section class="panel">
-  <div class="panel-head">
-    <h2>Next in line (<%= waitingClaims.length %>)</h2>
-  </div>
-
-  <% if (waitingClaims.length === 0) { %>
-    <div class="empty"><p>Nobody is queueing for an occupied item right now.</p></div>
-  <% } else { %>
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Item</th>
-          <th>Wanted by</th>
-          <th>Currently with</th>
-          <th>Reason</th>
-          <th>Since</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% waitingClaims.forEach(function (c) { %>
-          <tr>
-            <td>
-              <span class="row-title"><%= c.productName %></span>
-              <span class="row-sub"><span class="asset-tag"><%= c.assetTag || '—' %></span></span>
-            </td>
-            <td><%= c.userName %></td>
-            <td><%= c.holderName || '—' %></td>
-            <td><%= c.reason || '—' %></td>
-            <td><%= formatWhen(c.createdAt) %><span class="row-sub"><%= formatSince(c.createdAt) %> ago</span></td>
-          </tr>
-        <% }); %>
-      </tbody>
-    </table>
-    <p class="hint">The holder decides: they can release now (the item hands over instantly) or keep it — in which case it still goes to the claimant automatically when they return it.</p>
-  <% } %>
-</section>

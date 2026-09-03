@@ -1,14 +1,48 @@
 <div class="auth-card">
   <div class="auth-side">
-    <span class="brand-mark big">SI</span>
-    <h2>Studio<br />Inventory</h2>
-    <p>Track every camera, light and cable in the office — and who is holding it.</p>
-    <span class="tag-strip">STU-0001</span>
+    <span class="brand-mark big">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2.5 7.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2Z"/>
+        <path d="m15.5 10.5 5-3v9l-5-3Z"/>
+      </svg>
+    </span>
+
+    <h2>Studio Tracker</h2>
+    <p class="tagline">Track. Manage. Deliver.</p>
+
+    <!-- A flat line drawing of a studio floor: light, camera, monitor. Drawn
+         inline so it costs no extra request and recolours with the panel. -->
+    <svg class="art" viewBox="0 0 260 150" fill="none" stroke="#5b7bb5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="92" y="58" width="76" height="48" rx="3" fill="#12295c"/>
+      <rect x="100" y="66" width="60" height="32" rx="2" fill="#0a1c44"/>
+      <path d="M116 106v10h28v-10"/>
+      <path d="M104 116h52"/>
+      <path d="M30 40h26l-6 10H36Z" fill="#12295c"/>
+      <path d="M43 50v52"/>
+      <path d="M30 130h26"/><path d="M43 102 30 130"/><path d="M43 102l13 28"/>
+      <rect x="196" y="46" width="30" height="20" rx="2" fill="#12295c"/>
+      <path d="M226 52l10-5v16l-10-5"/>
+      <path d="M211 66v40"/>
+      <path d="M198 130h26"/><path d="M211 106l-13 24"/><path d="M211 106l13 24"/>
+      <path d="M8 138h244" stroke="#2b4a86"/>
+    </svg>
+
+    <div class="secure">
+      <span style="color:#7fa3e0">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-3.4 8-10V5.5l-8-3-8 3V12c0 6.6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>
+        </svg>
+      </span>
+      <span>
+        <b>Secure sign in</b>
+        <span>Your studio data stays with your studio</span>
+      </span>
+    </div>
   </div>
 
   <div class="auth-form">
-    <p class="eyebrow">Studio Inventory</p>
-    <h1>Sign in</h1>
+    <h1>Welcome back</h1>
+    <p class="lede">Sign in to your account</p>
 
     <% if (error) { %>
       <div class="alert alert-error"><%= error %></div>
@@ -16,18 +50,56 @@
 
     <form method="POST" action="/login" novalidate>
       <label class="field">
-        <span>Email</span>
-        <input type="email" name="email" value="<%= email %>" placeholder="you@office.com" required autofocus />
+        <div class="input-icon">
+          <span class="ico"><%- icon('user', 18) %></span>
+          <input type="email" name="email" value="<%= email %>"
+                 placeholder="Email address" required autofocus autocomplete="username" />
+        </div>
       </label>
 
       <label class="field">
-        <span>Password</span>
-        <input type="password" name="password" placeholder="••••••••" required />
+        <div class="input-icon">
+          <span class="ico"><%- icon('lock', 18) %></span>
+          <input type="password" name="password" id="password"
+                 placeholder="Password" required autocomplete="current-password" />
+          <button type="button" class="toggle" id="togglePassword"
+                  aria-label="Show or hide the password">
+            <%- icon('eye', 18) %>
+          </button>
+        </div>
       </label>
 
-      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+      <label class="field">
+        <div class="input-icon">
+          <span class="ico"><%- icon('shield', 18) %></span>
+          <select name="role">
+            <% roles.forEach(function (r) { %>
+              <option value="<%= r.value %>" <%= role === r.value ? 'selected' : '' %>>
+                <%= r.value ? r.label : 'Select role — auto detect' %>
+              </option>
+            <% }); %>
+          </select>
+        </div>
+      </label>
+
+      <button class="btn btn-primary btn-block" type="submit" style="margin-top: 6px">Login</button>
+
+      <div class="auth-meta">
+        <label class="check">
+          <input type="checkbox" name="remember" value="1" />
+          <span>Remember me</span>
+        </label>
+        <a href="#" onclick="alert('Ask your studio admin to reset your password — they can do it from the Staff or Admin accounts page.'); return false;">
+          Forgot password?
+        </a>
+      </div>
     </form>
 
-    <p class="hint">One form for everyone — admins go to the panel, staff go to the tools portal. Staff use the same email and password as the Telegram bot. <a href="/">View the shelf without signing in</a>.</p>
+    <div class="auth-foot">
+      <p class="hint">
+        Administrators land on their studio dashboard; the super admin picks a
+        studio first. Staff use the same email and password as the Telegram bot.
+      </p>
+    </div>
   </div>
 </div>

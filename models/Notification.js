@@ -19,7 +19,14 @@ const notificationSchema = new mongoose.Schema(
 
     kind: {
       type: String,
-      enum: ['request-rejected', 'booking-declined', 'booking-cancelled'],
+      enum: [
+        'request-rejected',
+        'booking-declined',
+        'booking-cancelled',
+        'purchase-approved',
+        'purchase-rejected',
+        'purchase-update',
+      ],
       required: true,
     },
 
@@ -42,7 +49,11 @@ const notificationSchema = new mongoose.Schema(
     decidedBy: { type: String, trim: true, default: null },
 
     // What this refers back to, if it still exists
-    refModel: { type: String, enum: ['AssignmentRequest', 'Booking'], default: null },
+    refModel: {
+      type: String,
+      enum: ['AssignmentRequest', 'Booking', 'ProcurementRequest'],
+      default: null,
+    },
     refId: { type: mongoose.Schema.Types.ObjectId, default: null },
 
     // Null until the person dismisses it from the dashboard

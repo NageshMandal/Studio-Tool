@@ -1,0 +1,39 @@
+<%
+  /**
+   * A chrome-free page for the studio selector: no sidebar, because the
+   * whole point of that screen is that a studio has not been chosen yet,
+   * and a sidebar full of studio-scoped links would be misleading.
+   */
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %> · Studio Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" style="padding: 0" href="/admin">
+      <span class="brand-mark">ST</span>
+      <span class="brand-name" style="color: var(--text)">Studio Tracker</span>
+    </a>
+    <div class="topbar-right">
+      <div class="whoami">
+        <span class="avatar"><%= (admin.name || 'A').trim().charAt(0).toUpperCase() %></span>
+        <span>
+          <span class="whoami-name"><%= admin.name %></span>
+          <span class="whoami-role"><%= can.isSuper ? 'Super admin' : 'Location admin' %></span>
+        </span>
+      </div>
+      <a class="btn btn-ghost btn-sm" href="/logout">Log out</a>
+    </div>
+  </header>
+  <%- body %>
+  <script src="/js/app.js"></script>
+</body>
+</html>
