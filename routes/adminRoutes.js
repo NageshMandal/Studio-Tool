@@ -114,11 +114,14 @@ router.delete('/users/:id', requireStudio, requirePrimaryAdmin, users.remove);
 router.get('/requests', requireStudio, requests.list);
 
 /**
- * Items handed back by staff, waiting for an admin to check them in. The
- * remark is what makes the record worth keeping, so it is required by the
- * handler rather than by the form alone.
+ * Submissions from staff: items they have asked to hand back. Until one is
+ * accepted the item is still theirs, so both decisions live here — accepting
+ * it, or sending it back because it never actually turned up. The remark is
+ * what makes the record worth keeping, so it is required by the handler
+ * rather than by the form alone.
  */
 router.post('/returns/:id/accept', requireStudio, requests.acceptReturn);
+router.post('/returns/:id/decline', requireStudio, requests.declineReturn);
 
 // Several items asked for together, decided together. Declared before the
 // :id routes so "batch" is never read as a request id.

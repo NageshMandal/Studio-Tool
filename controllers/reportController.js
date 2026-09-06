@@ -379,7 +379,7 @@ exports.exportCsv = async (req, res, next) => {
      */
     lines.push(
       'Asset tag,Item,Category,Person,Taken,Submitted,Staff remark,' +
-        'Checked in,Checked in by,Admin remark,Condition set,Hours,Reason'
+        'Accepted,Accepted by,Admin remark,Condition set,Hours,Reason'
     );
     report.logs.forEach((l) => {
       lines.push(
@@ -389,9 +389,9 @@ exports.exportCsv = async (req, res, next) => {
           l.category || '',
           l.userName,
           l.occupiedAt ? new Date(l.occupiedAt).toISOString() : '',
-          l.returnedAt ? new Date(l.returnedAt).toISOString() : 'still out',
+          l.submittedAt ? new Date(l.submittedAt).toISOString() : '',
           l.submitRemark || '',
-          l.acceptedAt ? new Date(l.acceptedAt).toISOString() : (l.returnedAt ? 'not checked in' : ''),
+          l.returnedAt ? new Date(l.returnedAt).toISOString() : (l.submittedAt ? 'awaiting the admin' : 'still out'),
           l.acceptedBy || '',
           l.acceptRemark || '',
           l.acceptCondition || '',

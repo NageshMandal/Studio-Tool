@@ -441,7 +441,9 @@
     if (!form) return;
     var note = window.prompt(form.getAttribute('data-note'));
     if (note === null) { e.preventDefault(); return; }
-    var field = form.querySelector('input[name="note"]');
+    // The hidden field is called `note` on some forms and `remark` on
+    // others; the prompt should not care which
+    var field = form.querySelector('input[name="note"], input[name="remark"]');
     if (field) field.value = note;
   });
 })();

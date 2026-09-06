@@ -102,8 +102,8 @@ async function releaseForClaim(claimId, holderUser) {
    * A next-in-line handover stays one step on purpose. The item is passing
    * straight from one person to the next who is standing there waiting for
    * it, with no moment where it is on a shelf to be checked — so parking it
-   * at `pending-return` would strand the claimant behind an admin for an
-   * item they can already see. The handover is recorded as such rather than
+   * behind an approval step would strand the claimant behind an admin for
+   * an item they can already see. The handover is recorded as such rather than
    * left looking like an unchecked return.
    */
   await releaseProduct({

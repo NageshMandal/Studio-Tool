@@ -109,6 +109,12 @@
               </div>
             <% }); %>
 
+            <% if (p.returnRequestedAt) { %>
+              <div class="alert alert-info" style="margin: 0; font-size: 12.5px">
+                <b>Submitted for approval.</b> It stays with you until your
+                admin accepts it.
+              </div>
+            <% } else { %>
             <form method="POST" action="/staff/return/<%= p._id %>" class="submit-form">
               <label class="field">
                 <span>How is it coming back?</span>
@@ -119,8 +125,9 @@
                   when they check it in, so both accounts are kept.
                 </span>
               </label>
-              <button class="btn btn-primary btn-block btn-sm" type="submit">Submit item</button>
+              <button class="btn btn-primary btn-block btn-sm" type="submit">Submit for approval</button>
             </form>
+            <% } %>
           </div>
         <% }); %>
       </div>

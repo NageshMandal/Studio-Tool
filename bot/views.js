@@ -263,7 +263,7 @@ function itemDetail(item, holderName, viewer, pendingRequest = null, nextClaim =
   const rows = [];
 
   if (heldByViewer) {
-    rows.push([{ text: '✅ Submit item (return it)', callback_data: `ret:${item._id}` }]);
+    rows.push([{ text: '✅ Submit for approval', callback_data: `ret:${item._id}` }]);
   } else if (pendingRequest) {
     rows.push([{ text: '✖️ Cancel my request', callback_data: `cxl:${pendingRequest._id}` }]);
   } else if (isTakeable(item)) {

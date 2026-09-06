@@ -17,9 +17,7 @@ const { CATEGORIES } = require('../models/Product');
  */
 
 const CONDITIONS = ['new', 'good', 'needs-repair', 'retired'];
-// 'pending-return' is set by the system, never chosen on the form, but it
-// still has to be filterable — an admin needs to find what is waiting on them
-const STATUSES = ['available', 'assigned', 'maintenance', 'pending-return'];
+const STATUSES = ['available', 'assigned', 'maintenance'];
 
 const cleanBody = (body) => ({
   name: body.name,

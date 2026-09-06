@@ -196,12 +196,12 @@ app.use('/admin', protect, withScope, async (req, res, next) => {
       AssignmentRequest.countDocuments(scoped),
       Booking.countDocuments(scoped),
       /**
-       * Items handed back but not yet checked in count towards the badge
-       * too. Such an item is off the shelf and cannot be taken by anybody,
-       * so a check-in queue nobody notices is the one real cost of the
-       * two-step return — the badge is where it gets noticed.
+       * Submissions waiting on a decision count towards the badge too.
+       * Each one is still signed out to the person who submitted it and
+       * still counted as out, so a queue nobody notices is the one real
+       * cost of the two-step return — the badge is where it gets noticed.
        */
-      UsageLog.countDocuments(req.scope.filter({ returnedAt: { $ne: null }, acceptedAt: null })),
+      UsageLog.countDocuments(req.scope.filter({ submittedAt: { $ne: null }, returnedAt: null })),
     ]);
     res.locals.pendingRequestCount = requests + bookings + checkIns;
 

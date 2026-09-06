@@ -46,8 +46,8 @@
 <section class="panel">
   <div class="panel-head">
     <div>
-      <h2>Items to check in</h2>
-      <p class="sub">Handed back by staff, waiting for you to look at them</p>
+      <h2>Submissions to accept</h2>
+      <p class="sub">Staff asking to hand an item back — it stays with them until you accept</p>
     </div>
     <span class="badge <%= submitted.length ? 'badge-amber' : 'badge-green' %>">
       <%= submitted.length %> waiting
@@ -56,11 +56,12 @@
 
   <div class="panel-body">
     <% if (submitted.length === 0) { %>
-      <div class="empty"><p>Nothing is waiting to be checked in.</p></div>
+      <div class="empty"><p>No submissions are waiting.</p></div>
     <% } else { %>
       <p class="hint" style="margin-bottom: 12px">
-        These items are off the shelf and nobody can take them until you check
-        them in, so anyone waiting on one is waiting on this list.
+        Each of these is still signed out to the person who submitted it, and
+        still counted as out, until you accept it. Accepting is what puts it
+        back on the shelf and hands it to anyone waiting.
       </p>
 
       <% submitted.forEach(function (l) { %>
@@ -71,10 +72,11 @@
               <div class="request-meta">
                 <span class="asset-tag"><%= l.assetTag %></span>
                 <span><%- icon('user', 13) %> <%= l.userName %></span>
-                <span>Submitted <%= formatWhen(l.returnedAt) %></span>
-                <span>Held <%= formatDuration(l.durationMinutes) %></span>
+                <span>Submitted <%= formatWhen(l.submittedAt) %></span>
+                <span>Held <%= formatSince(l.occupiedAt) %> so far</span>
               </div>
             </div>
+            <span class="badge badge-purple">Still with <%= l.userName %></span>
           </div>
 
           <p class="request-body">
@@ -105,8 +107,20 @@
             </label>
 
             <div class="actions">
-              <button class="btn btn-ok btn-sm" type="submit"><%- icon('check', 14) %> Check in</button>
+              <button class="btn btn-ok btn-sm" type="submit"><%- icon('check', 14) %> Accept</button>
             </div>
+          </form>
+
+          <%
+            /* Sending it back is the escape hatch for a submission made by
+               mistake, or an item that never actually turned up. Without it
+               the only ways out are accepting something you never received,
+               or leaving it in the queue forever. */
+          %>
+          <form method="POST" action="/admin/returns/<%= l._id %>/decline" class="btn-row"
+                style="margin-top: 10px" data-note="Why are you sending this back to them?">
+            <input type="hidden" name="remark" />
+            <button class="btn btn-ghost btn-sm" type="submit">Send back — it never arrived</button>
           </form>
         </div>
       <% }); %>

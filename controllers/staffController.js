@@ -6,7 +6,7 @@ const AssignmentRequest = require('../models/AssignmentRequest');
 const Booking = require('../models/Booking');
 const NextClaim = require('../models/NextClaim');
 const ProcurementRequest = require('../models/ProcurementRequest');
-const { occupyProduct, submitProduct } = require('../services/occupancy');
+const { occupyProduct, requestSubmission } = require('../services/occupancy');
 const { createBooking } = require('../services/booking');
 const { createClaim, releaseForClaim, keepDespiteClaim } = require('../services/claims');
 const notifications = require('../services/notifications');
@@ -24,7 +24,7 @@ const { CATEGORIES } = require('../models/Product');
  * every query below is scoped by something the person cannot influence.
  */
 
-const STATUSES = ['available', 'assigned', 'maintenance', 'pending-return'];
+const STATUSES = ['available', 'assigned', 'maintenance'];
 
 // Everything this person may see
 const mine = (req, extra = {}) => ({ ...extra, location: req.studioId });
@@ -429,7 +429,12 @@ exports.occupy = async (req, res, next) => {
 };
 
 /**
- * POST /staff/return/:id — hand an item back, with a remark on its condition.
+ * POST /staff/return/:id — ask to hand an item back, with a remark.
+ *
+ * This does not hand it over. The item stays with this person until their
+ * studio admin accepts, which is what keeps it on somebody's list for the
+ * whole time it is in the world — an item that had left the holder but not
+ * yet reached the shelf would be nobody's responsibility.
  *
  * The remark is required and has no default. "NA" is a fine answer and the
  * usual one, but it has to be typed: a note that filled itself in would be
@@ -454,21 +459,24 @@ exports.returnItem = async (req, res, next) => {
     if (!product.assignedTo || String(product.assignedTo) !== String(user._id)) {
       return back(req, res, 'That one is not with you');
     }
+    if (product.returnRequestedAt) {
+      return back(req, res, `${product.name} is already submitted — waiting for your admin to accept it`);
+    }
 
-    await submitProduct({ product, source: 'web', remark });
+    await requestSubmission({ product, source: 'web', remark });
 
     notifyLocationAdmins(
       req.studioId,
       `\ud83d\udce6 <b>${escapeHtml(user.name)}</b> submitted ` +
-        `<b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag || '')}</code>.\n` +
+        `<b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag || '')}</code> for approval.\n` +
         `\ud83d\udcdd Their remark: ${escapeHtml(remark)}\n` +
-        `It is waiting for you to check it in \u2192 Requests.`
+        `It stays with them until you accept it \u2192 Requests.`
     );
 
     back(
       req,
       res,
-      `${product.name} submitted — it is with your studio admin to check in`
+      `${product.name} submitted for approval — it stays with you until your admin accepts it`
     );
   } catch (err) {
     next(err);
@@ -528,7 +536,6 @@ exports.requestMany = async (req, res, next) => {
       if (
         product.condition === 'retired' ||
         product.status === 'maintenance' ||
-        product.status === 'pending-return' ||
         product.condition === 'needs-repair'
       ) {
         skipped.push(`${product.name} (not available)`);

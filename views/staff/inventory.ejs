@@ -5,7 +5,6 @@
     return (
       p.condition === 'retired' ||
       p.status === 'maintenance' ||
-      p.status === 'pending-return' ||
       p.condition === 'needs-repair'
     );
   }
@@ -152,7 +151,17 @@
           <% } %>
         </div>
 
-        <% if (mine) { %>
+        <% if (mine && p.returnRequestedAt) { %>
+          <%
+            /* Submitted, but still theirs. Saying so plainly stops the
+               obvious wrong conclusion — that pressing Submit did nothing. */
+          %>
+          <div class="alert alert-info" style="margin: 0; font-size: 12.5px">
+            <b>Submitted for approval.</b> It stays with you until your admin
+            accepts it.
+          </div>
+
+        <% } else if (mine) { %>
           <form method="POST" action="/staff/return/<%= p._id %>" class="submit-form">
             <label class="field">
               <span>How is it coming back?</span>
@@ -163,7 +172,7 @@
                 when they check it in, so both accounts are kept.
               </span>
             </label>
-            <button class="btn btn-primary btn-block btn-sm" type="submit">Submit item</button>
+            <button class="btn btn-primary btn-block btn-sm" type="submit">Submit for approval</button>
           </form>
 
         <% } else if (pending) { %>

@@ -223,10 +223,11 @@ const PAGES = {
       ],
     }],
     loose: [{ _id: 'r1', productName: 'Sony FX3', assetTag: 'PAT-0001', userName: 'Rahul', reason: 'Shoot', createdAt: new Date() }],
-    // Handed back, waiting on the admin to check them in
+    // Submitted by their holder, still with them, waiting on the admin
     submitted: [{
       _id: 'l1', productName: 'Mic (Rode)', assetTag: 'PAT-0003', userName: 'Sahil',
-      returnedAt: new Date(), durationMinutes: 180, submitRemark: 'Windshield torn',
+      occupiedAt: new Date(Date.now() - 3 * 3600000), submittedAt: new Date(),
+      returnedAt: null, submitRemark: 'Windshield torn',
     }],
     decided: [{ _id: 'r2', productName: 'Lens', assetTag: 'PAT-0002', userName: 'Priya', status: 'approved', decidedBy: 'admin', decidedAt: new Date() }],
     pendingBookings: [{ _id: 'b1', productName: 'Mic', assetTag: 'PAT-0003', userName: 'Aman', bookedFor: '2026-09-10', reason: 'Client' }],

@@ -78,11 +78,14 @@
               </td>
               <td>
                 <% if (p.assignedTo) { %>
-                  <span class="badge badge-amber">Out</span>
+                  <% if (p.returnRequestedAt) { %>
+                    <span class="badge badge-purple">Submitted, awaiting you</span>
+                  <% } else { %>
+                    <span class="badge badge-amber">Out</span>
+                  <% } %>
                 <% } else if (p.status === 'maintenance') { %>
                   <span class="badge badge-red">Maintenance</span>
-                <% } else if (p.status === 'pending-return') { %>
-                  <span class="badge badge-purple">Waiting to be checked in</span>
+
                 <% } else { %>
                   <span class="badge badge-green">Available</span>
                 <% } %>

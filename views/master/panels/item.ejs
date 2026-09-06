@@ -55,10 +55,10 @@
           <% } %>
         </span>
         <span class="panel-row-actions">
-          <% if (!h.returnedAt) { %>
+          <% if (!h.returnedAt && !h.submittedAt) { %>
             <span class="badge badge-amber">Still out</span>
-          <% } else if (!h.acceptedAt) { %>
-            <span class="badge badge-purple">Waiting to be checked in</span>
+          <% } else if (!h.returnedAt) { %>
+            <span class="badge badge-purple">Submitted, awaiting approval</span>
           <% } else { %>
             <span class="badge badge-green">Checked in</span>
           <% } %>

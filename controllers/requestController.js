@@ -5,7 +5,7 @@ const NextClaim = require('../models/NextClaim');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const approvals = require('../services/approvals');
-const { acceptReturn: acceptReturnItem } = require('../services/occupancy');
+const { acceptSubmission, declineSubmission } = require('../services/occupancy');
 const { pushNotification } = require('../services/notifications');
 const { escapeHtml, todayKey, formatDay } = require('../utils/format');
 
@@ -95,17 +95,17 @@ exports.list = async (req, res, next) => {
       .lean();
 
     /**
-     * Items handed back but not yet checked in. Oldest first, because an
-     * item sitting here is off the shelf and unavailable to everyone — this
-     * queue going unwatched is the one real cost of the two-step return, so
-     * it is put where the admin already looks.
+     * Submissions waiting on a decision. Oldest first, because each one is
+     * still sitting with the person who asked to hand it back and still
+     * counted as out — this queue going unwatched is the one real cost of
+     * the two-step return, so it is put where the admin already looks.
      */
     const submitted = await UsageLog.find({
       ...scoped,
-      returnedAt: { $ne: null },
-      acceptedAt: null,
+      submittedAt: { $ne: null },
+      returnedAt: null,
     })
-      .sort({ returnedAt: 1 })
+      .sort({ submittedAt: 1 })
       .lean();
 
     /**
@@ -194,37 +194,57 @@ exports.decideBatch = async (req, res, next) => {
 };
 
 /**
- * POST /admin/returns/:id/accept — check in an item a staff member submitted.
+ * Loads a submission and refuses it if it is not this studio's, or has
+ * already been dealt with. Returns { log, product } or null after redirecting.
+ */
+async function loadSubmission(req, res) {
+  const log = await UsageLog.findById(req.params.id);
+  if (!log || !req.scope.owns(log)) {
+    res.redirect(backTo('That submission belongs to another studio'));
+    return null;
+  }
+  if (!log.submittedAt) {
+    res.redirect(backTo('That item has not been submitted yet'));
+    return null;
+  }
+  if (log.returnedAt) {
+    res.redirect(backTo('That one has already been accepted'));
+    return null;
+  }
+
+  const product = await Product.findById(log.product);
+  if (!product) {
+    res.redirect(backTo('That item no longer exists'));
+    return null;
+  }
+
+  return { log, product };
+}
+
+/**
+ * POST /admin/returns/:id/accept — accept a submission.
  *
- * The admin's remark is required for the same reason the staff member's is:
- * a blank second opinion is not a second opinion. Only once this is done
- * does the item go back into circulation and whoever was waiting for it get
- * their turn.
+ * This is the moment the item stops being the staff member's and goes back
+ * into circulation. The admin's remark is required for the same reason the
+ * staff member's is: a blank second opinion is not a second opinion.
  */
 exports.acceptReturn = async (req, res, next) => {
   try {
     const remark = (req.body.remark || '').trim().slice(0, 300);
     if (remark.length < 2) {
-      return res.redirect(backTo('Add a remark when you check an item in — type NA if it came back fine'));
+      return res.redirect(backTo('Add a remark when you accept an item — type NA if it came back fine'));
     }
 
-    const log = await UsageLog.findById(req.params.id);
-    if (!log || !req.scope.owns(log)) {
-      return res.redirect(backTo('That submission belongs to another studio'));
-    }
-    if (!log.returnedAt) return res.redirect(backTo('That item has not been submitted yet'));
-    if (log.acceptedAt) return res.redirect(backTo('That one has already been checked in'));
-
-    const product = await Product.findById(log.product);
-    if (!product) return res.redirect(backTo('That item no longer exists'));
+    const loaded = await loadSubmission(req, res);
+    if (!loaded) return undefined;
 
     const condition = ['new', 'good', 'needs-repair', 'retired'].includes(req.body.condition)
       ? req.body.condition
       : null;
 
-    await acceptReturnItem({
-      product,
-      log,
+    await acceptSubmission({
+      product: loaded.product,
+      log: loaded.log,
       acceptedBy: whoIs(req),
       remark,
       condition,
@@ -232,9 +252,9 @@ exports.acceptReturn = async (req, res, next) => {
 
     return res.redirect(
       backTo(
-        product.status === 'maintenance'
-          ? `${product.name} checked in and sent to maintenance`
-          : `${product.name} checked in and back on the shelf`
+        loaded.product.status === 'maintenance'
+          ? `${loaded.product.name} accepted and sent to maintenance`
+          : `${loaded.product.name} accepted and back on the shelf`
       )
     );
   } catch (err) {
@@ -242,7 +262,53 @@ exports.acceptReturn = async (req, res, next) => {
   }
 };
 
-// POST /admin/requests/:id/approve
+/**
+ * POST /admin/returns/:id/decline — send a submission back.
+ *
+ * For when the item has not actually turned up, or something needs sorting
+ * out first. It stays with the same person on the same loan, so nothing
+ * about who is responsible changes — only the request is undone. Without
+ * this, a submission made by mistake would sit in the queue forever, or an
+ * admin would have to accept an item they never received.
+ */
+exports.declineReturn = async (req, res, next) => {
+  try {
+    const remark = (req.body.remark || '').trim().slice(0, 300);
+    if (remark.length < 2) {
+      return res.redirect(backTo('Say why you are sending it back, so they know what to do'));
+    }
+
+    const loaded = await loadSubmission(req, res);
+    if (!loaded) return undefined;
+
+    await declineSubmission({
+      product: loaded.product,
+      log: loaded.log,
+      decidedBy: whoIs(req),
+      remark,
+    });
+
+    const user = await User.findById(loaded.log.user);
+    await pushNotification({
+      user,
+      kind: 'return-declined',
+      title: 'Your submission was sent back',
+      productName: loaded.log.productName,
+      assetTag: loaded.log.assetTag,
+      note: remark,
+      telegramText:
+        `\u21a9\ufe0f Your submission of <b>${escapeHtml(loaded.log.productName)}</b> ` +
+        `<code>${escapeHtml(loaded.log.assetTag || '')}</code> was sent back by the admin.\n` +
+        `\ud83d\udcdd ${escapeHtml(remark)}\n\nIt is still with you.`,
+    });
+
+    return res.redirect(backTo(`${loaded.product.name} sent back — it is still with ${loaded.log.userName}`));
+  } catch (err) {
+    return next(err);
+  }
+};
+
+// POST /admin/requests/:id/approve// POST /admin/requests/:id/approve
 exports.approve = async (req, res, next) => {
   try {
     if (!(await loadOwned(AssignmentRequest, req, res))) return;

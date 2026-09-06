@@ -20,17 +20,6 @@ async function occupyProduct({ product, user, reason, source = 'telegram' }) {
     err.code = 'RETIRED';
     throw err;
   }
-  /**
-   * An item that has been handed back but not yet checked in by an admin is
-   * off limits to everybody, including the admin panel. Its condition has
-   * not been looked at, and passing it straight to the next person is the
-   * exact thing the two-step return exists to stop.
-   */
-  if (product.status === 'pending-return') {
-    const err = new Error('This item is waiting to be checked in by an admin');
-    err.code = 'PENDING_RETURN';
-    throw err;
-  }
   if (product.status === 'maintenance') {
     const err = new Error('This item is in maintenance');
     err.code = 'MAINTENANCE';
@@ -82,48 +71,57 @@ async function occupyProduct({ product, user, reason, source = 'telegram' }) {
 }
 
 /**
- * A return happens in two steps, and this is why.
+ * Handing an item back takes two steps, and this is why.
  *
- * The staff member hands the item back and says what state it is in. It then
- * sits at `pending-return` — off the shelf, but not with anybody — until an
- * admin looks at it and accepts it with a remark of their own. Only then does
- * it go back into circulation.
+ * The staff member asks to hand it back and says what state it is in. The
+ * item STAYS WITH THEM — still assigned, still their responsibility — until
+ * an admin looks at it and accepts, with a remark of their own. Only then
+ * does the loan end and the item go back into circulation.
  *
- * The gap is the point. If a lens comes back scratched, both accounts of it
- * exist on the same row with times against them, instead of being worked out
- * later from memory. It also means nobody is handed an item whose condition
- * nobody has checked.
+ * Keeping it assigned in between is the whole point. An item that had left
+ * the holder but not yet reached the shelf would belong to nobody: not on
+ * anyone's list, not anyone's responsibility, and invisible if it went
+ * missing in exactly the gap where losing things is easiest.
  *
  * Everything waiting on the item — a booking for today, the next-in-line
- * queue — is not lost, only deferred: it all runs on acceptance instead of on
- * submission, so the queue still empties itself, just after the check.
+ * queue — runs on acceptance, so the queue still empties itself, just after
+ * the check rather than before it.
  */
 
-/** Ends the loan on its log row. Shared by both return paths. */
-async function closeLoan(product, { at, source, note, remark }) {
-  const openLog = await UsageLog.findOne({
-    product: product._id,
-    returnedAt: null,
-  }).sort({ occupiedAt: -1 });
+/** The open loan for an item, or null. */
+function openLoanFor(product) {
+  return UsageLog.findOne({ product: product._id, returnedAt: null }).sort({ occupiedAt: -1 });
+}
 
-  if (!openLog) return null;
+/**
+ * Step one: the holder asks to hand the item back.
+ *
+ * Nothing about who holds it changes here. The remark is required by the
+ * caller rather than defaulted — an empty note silently saved as "nothing to
+ * report" would be exactly the record this feature exists to prevent.
+ */
+async function requestSubmission({ product, source = 'telegram', remark }) {
+  const submittedAt = new Date();
 
-  openLog.returnedAt = at;
-  openLog.durationMinutes = Math.max(
-    0,
-    Math.round((at - new Date(openLog.occupiedAt)) / 60000)
-  );
-  openLog.returnSource = source;
-  if (note) openLog.note = note;
-  if (remark) openLog.submitRemark = String(remark).trim().slice(0, 300);
-  await openLog.save();
+  const openLog = await openLoanFor(product);
+  if (openLog) {
+    openLog.submittedAt = submittedAt;
+    openLog.submitRemark = remark ? String(remark).trim().slice(0, 300) : null;
+    openLog.returnSource = source;
+    await openLog.save();
+  }
+
+  // The item is still assigned and still 'assigned' — only flagged as
+  // waiting on an admin
+  product.returnRequestedAt = submittedAt;
+  await product.save();
 
   return openLog;
 }
 
 /**
  * Puts an item back into circulation and lets whoever was waiting have it.
- * Called on acceptance, not on submission.
+ * Called on acceptance, never on submission.
  */
 async function restoreToShelf(product, { claims = true } = {}) {
   // A broken item goes to maintenance rather than straight back into the pool
@@ -157,47 +155,59 @@ async function restoreToShelf(product, { claims = true } = {}) {
 }
 
 /**
- * Step one: the staff member hands the item back with their remark.
+ * Step two: the admin accepts. This is the moment the loan ends, so the
+ * duration covers the whole time the person was responsible for the item —
+ * including the wait for an admin, because it was still theirs throughout.
  *
- * The remark is required by the caller, not defaulted here — an empty note
- * silently saved as "nothing to report" would be exactly the record this
- * feature exists to prevent.
+ * `condition` is optional and only applied when given, so accepting never
+ * silently resets a condition an admin set elsewhere. Marking it as needing
+ * repair sends it to maintenance instead of back into the pool.
  */
-async function submitProduct({ product, source = 'telegram', note, remark }) {
-  const submittedAt = new Date();
-
-  const openLog = await closeLoan(product, { at: submittedAt, source, note, remark });
-
-  product.assignedTo = null;
-  product.occupiedAt = null;
-  product.occupyReason = null;
-  product.status = 'pending-return';
-  await product.save();
-
-  return openLog;
-}
-
-/**
- * Step two: an admin checks the item in.
- *
- * `condition` is optional and only applied when given, so accepting an item
- * never silently resets a condition an admin set elsewhere. If they mark it
- * as needing repair, restoreToShelf sends it to maintenance rather than back
- * into the pool.
- */
-async function acceptReturn({ product, log, acceptedBy, remark, condition, claims = true }) {
-  const acceptedAt = new Date();
+async function acceptSubmission({ product, log, acceptedBy, remark, condition, claims = true }) {
+  const returnedAt = new Date();
 
   if (log) {
-    log.acceptedAt = acceptedAt;
+    log.returnedAt = returnedAt;
+    log.durationMinutes = Math.max(
+      0,
+      Math.round((returnedAt - new Date(log.occupiedAt)) / 60000)
+    );
     log.acceptRemark = remark ? String(remark).trim().slice(0, 300) : null;
     log.acceptedBy = acceptedBy || null;
     log.acceptCondition = condition || null;
     await log.save();
   }
 
+  product.assignedTo = null;
+  product.occupiedAt = null;
+  product.occupyReason = null;
+  product.returnRequestedAt = null;
   if (condition) product.condition = condition;
+
   await restoreToShelf(product, { claims });
+
+  return log;
+}
+
+/**
+ * The admin sends a submission back: the item was not actually handed over,
+ * or something needs sorting out first.
+ *
+ * It stays exactly where it was — with the same person, on the same loan —
+ * so nothing about who is responsible changes. Only the request is undone.
+ */
+async function declineSubmission({ product, log, decidedBy, remark }) {
+  if (log) {
+    log.submittedAt = null;
+    const note = remark ? String(remark).trim().slice(0, 300) : null;
+    log.note = [log.note, `Submission sent back by ${decidedBy || 'the admin'}${note ? `: ${note}` : ''}`]
+      .filter(Boolean)
+      .join(' · ');
+    await log.save();
+  }
+
+  product.returnRequestedAt = null;
+  await product.save();
 
   return log;
 }
@@ -220,14 +230,19 @@ async function releaseProduct({
   acceptedBy,
   acceptRemark,
 }) {
-  const at = new Date();
-  const openLog = await closeLoan(product, { at, source, note, remark });
+  const openLog = await openLoanFor(product);
 
-  product.assignedTo = null;
-  product.occupiedAt = null;
-  product.occupyReason = null;
+  if (openLog) {
+    openLog.returnSource = source;
+    if (note) openLog.note = note;
+    if (remark) {
+      openLog.submittedAt = openLog.submittedAt || new Date();
+      openLog.submitRemark = String(remark).trim().slice(0, 300);
+    }
+    await openLog.save();
+  }
 
-  await acceptReturn({
+  await acceptSubmission({
     product,
     log: openLog,
     acceptedBy: acceptedBy || 'system',
@@ -326,10 +341,11 @@ async function syncAssignment({ product, previousAssignee, nextAssigneeId, users
 
 module.exports = {
   occupyProduct,
-  submitProduct,
-  acceptReturn,
+  requestSubmission,
+  acceptSubmission,
+  declineSubmission,
   releaseProduct,
   restoreToShelf,
-  syncAssignment,
   fulfillNextClaim,
+  syncAssignment,
 };

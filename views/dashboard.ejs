@@ -44,7 +44,7 @@
     <p class="stat-note">
       <%= stats.pendingRequests %> requests · <%= stats.pendingBookings %> bookings
       <% if (stats.pendingCheckIns > 0) { %>
-        · <%= stats.pendingCheckIns %> to check in
+        · <%= stats.pendingCheckIns %> submitted
       <% } %>
     </p>
   </div>
@@ -65,8 +65,8 @@
       href: '/admin/requests',
       label:
         stats.pendingCheckIns +
-        ' item' + (stats.pendingCheckIns === 1 ? '' : 's') +
-        ' handed back, waiting to be checked in',
+        ' submission' + (stats.pendingCheckIns === 1 ? '' : 's') +
+        ' waiting on you',
     });
   }
   if (can.viewProcurement && openProcurement > 0) {

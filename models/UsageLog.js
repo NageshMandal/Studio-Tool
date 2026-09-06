@@ -32,32 +32,36 @@ const usageLogSchema = new mongoose.Schema(
     occupiedAt: { type: Date, required: true, default: Date.now },
 
     /**
-     * A return happens in two steps, and both are recorded here.
+     * Handing an item back takes two steps, and the item stays with the
+     * person for both of them.
      *
-     *   returnedAt   the moment the STAFF handed the item back. This is the
-     *                submission date, and it is what ends the loan — every
-     *                duration, report and "still out" test keys off it, as
-     *                it always has.
-     *   acceptedAt   the moment the ADMIN checked the item in.
+     *   submittedAt  the staff member asked to hand it back, and said what
+     *                condition it is in. The loan does NOT end here — the
+     *                item is still theirs and still their responsibility.
+     *   returnedAt   the admin accepted that submission. This is when the
+     *                loan actually ends, and what every duration, report and
+     *                "still out" test keys off, exactly as it always has.
      *
-     * Each side leaves a remark, which is the point of splitting the two:
-     * if something happened to an item, both accounts of it are on the same
-     * row, timestamped, rather than being argued about later from memory.
-     * Between the two moments the item is not on the shelf and not with
-     * anybody — see Product's `pending-return` status.
+     * Each side leaves a remark, which is the point of splitting the two: if
+     * something happened to an item, both accounts of it sit on the same row
+     * with times against them rather than being argued about later from
+     * memory. And because the item stays assigned until the admin accepts,
+     * nobody is released from responsibility for something before anyone has
+     * actually looked at it.
      */
-    returnedAt: { type: Date, default: null },
-    durationMinutes: { type: Number, default: null },
+    submittedAt: { type: Date, default: null },
 
     // The staff member's account of the item's condition. Required when they
     // submit; 'NA' is a perfectly good answer and the one most often true.
     submitRemark: { type: String, trim: true, maxlength: 300, default: null },
 
-    acceptedAt: { type: Date, default: null },
+    returnedAt: { type: Date, default: null },
+    durationMinutes: { type: Number, default: null },
+
     acceptRemark: { type: String, trim: true, maxlength: 300, default: null },
     // Which admin accepted it (email or name), for the audit trail
     acceptedBy: { type: String, trim: true, default: null },
-    // The condition the admin recorded on check-in, when they changed it
+    // The condition the admin recorded on accepting, when they changed it
     acceptCondition: { type: String, trim: true, default: null },
 
     // Why the item was taken, captured at the moment it went out
@@ -83,14 +87,14 @@ usageLogSchema.virtual('isOpen').get(function () {
  * disagree with the dates it is derived from.
  */
 usageLogSchema.virtual('returnStage').get(function () {
-  if (!this.returnedAt) return 'out';
-  return this.acceptedAt ? 'accepted' : 'submitted';
+  if (this.returnedAt) return 'accepted';
+  return this.submittedAt ? 'submitted' : 'out';
 });
 
 usageLogSchema.set('toJSON', { virtuals: true });
 usageLogSchema.set('toObject', { virtuals: true });
 
 // Finding what is waiting on an admin has to be quick — it is on their queue
-usageLogSchema.index({ location: 1, returnedAt: 1, acceptedAt: 1 });
+usageLogSchema.index({ location: 1, submittedAt: 1, returnedAt: 1 });
 
 module.exports = mongoose.model('UsageLog', usageLogSchema);

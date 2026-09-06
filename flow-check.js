@@ -416,10 +416,13 @@ setTimeout(async () => {
 
   console.log('\nTwo-step returns — the admin queue and its guards');
   const UsageLog2 = require('./models/UsageLog');
+  // Submitted by its holder, still signed out to them, waiting on the admin
   const submittedLog = {
     _id: '000000000000000000000301', product: '000000000000000000000201',
     productName: 'Camera (Sony A7III)', assetTag: 'PAT-0001', userName: 'Amit Kumar',
-    location: S1, returnedAt: new Date(), acceptedAt: null, durationMinutes: 180,
+    user: '000000000000000000000401', location: S1,
+    occupiedAt: new Date(Date.now() - 3 * 3600000),
+    submittedAt: new Date(), returnedAt: null,
     submitRemark: 'Lens cap missing',
   };
   let savedLog = null;
@@ -430,7 +433,8 @@ setTimeout(async () => {
       : null;
 
   let reqPage = await (await call('/admin/requests', inStudio)).text();
-  check('the check-in queue is on the requests page', reqPage.includes('Items to check in'));
+  check('the submissions queue is on the requests page', reqPage.includes('Submissions to accept'));
+  check('and says the item is still with the person', reqPage.includes('Still with Amit Kumar'));
   check('it shows what the staff member said', reqPage.includes('Lens cap missing'));
   check('and asks the admin for their own remark', reqPage.includes('name="remark"'));
   check('with a condition they can set', reqPage.includes('name="condition"'));
@@ -441,7 +445,7 @@ setTimeout(async () => {
     res.headers.get('location'));
   check('and nothing was written', savedLog === null, true, String(savedLog && savedLog._id));
 
-  console.log('\nChecking an item in actually writes both halves');
+  console.log('\nAccepting a submission actually writes both halves');
   /**
    * The real occupancy service runs here. Patching it would have proved
    * nothing: requestController destructures acceptReturn at require time, so
@@ -452,8 +456,10 @@ setTimeout(async () => {
   Product.findById = (id) =>
     chain({
       _id: String(id), name: 'Camera (Sony A7III)', assetTag: 'PAT-0001', category: 'Camera',
-      location: S1, condition: 'good', status: 'pending-return', price: 250000,
-      assignedTo: null, occupiedAt: null,
+      location: S1, condition: 'good', status: 'assigned', price: 250000,
+      // Still signed out to its holder, and flagged as submitted
+      assignedTo: '000000000000000000000401', occupiedAt: new Date(),
+      returnRequestedAt: new Date(),
       save: async function () { shelved = this; return this; },
     });
   NextClaim.findOne = () => ({ sort: async () => null });
@@ -471,20 +477,54 @@ setTimeout(async () => {
   check('the admin remark was saved',
     savedLog && savedLog.acceptRemark === 'Cap replaced from spares',
     savedLog && savedLog.acceptRemark);
-  check('with a time against it', Boolean(savedLog && savedLog.acceptedAt), true);
+  check('with a time against it — the moment the loan ended', Boolean(savedLog && savedLog.returnedAt), true);
+  check('and a duration covering the whole time it was theirs',
+    Boolean(savedLog && savedLog.durationMinutes > 0), savedLog && String(savedLog.durationMinutes));
   check('and the admin named', Boolean(savedLog && savedLog.acceptedBy), true);
   check('the staff remark is still there beside it',
     savedLog && savedLog.submitRemark === 'Lens cap missing',
     savedLog && savedLog.submitRemark);
-  check('the item went back on the shelf', shelved && shelved.status === 'available',
+  check('only now does the item leave its holder', shelved && shelved.assignedTo === null,
+    shelved && String(shelved.assignedTo));
+  check('the submitted flag is cleared', shelved && shelved.returnRequestedAt === null,
+    shelved && String(shelved.returnRequestedAt));
+  check('and it goes back on the shelf', shelved && shelved.status === 'available',
     shelved && shelved.status);
 
-  // Checking the same one in twice is refused rather than double-counted
-  UsageLog2.findById = async () => ({ ...submittedLog, acceptedAt: new Date(), save: async function () { return this; } });
+  // Accepting the same one twice is refused rather than double-counted
+  UsageLog2.findById = async () => ({
+    ...submittedLog, returnedAt: new Date(), save: async function () { return this; },
+  });
   res = await post(`/admin/returns/${submittedLog._id}/accept`, { remark: 'NA' }, inStudio);
-  check('checking the same item in twice is refused',
-    decodeURIComponent(String(res.headers.get('location'))).includes('already been checked in'),
+  check('accepting the same submission twice is refused',
+    decodeURIComponent(String(res.headers.get('location'))).includes('already been accepted'),
     res.headers.get('location'));
+
+  console.log('\nA submission can be sent back');
+  UsageLog2.findById = async () =>
+    ({ ...submittedLog, save: async function () { savedLog = this; return this; } });
+  savedLog = null;
+  shelved = null;
+  res = await post(`/admin/returns/${submittedLog._id}/decline`, { remark: '' }, inStudio);
+  check('a blank reason is refused',
+    decodeURIComponent(String(res.headers.get('location'))).includes('Say why'),
+    res.headers.get('location'));
+
+  savedLog = null;
+  res = await post(
+    `/admin/returns/${submittedLog._id}/decline`,
+    { remark: 'Never arrived at the desk' },
+    inStudio
+  );
+  check('a good one redirects back to the queue',
+    res.status === 302 && String(res.headers.get('location')).startsWith('/admin/requests'),
+    `${res.status} ${res.headers.get('location')}`);
+  check('the submission is cleared, so it leaves the queue',
+    savedLog && savedLog.submittedAt === null, savedLog && String(savedLog.submittedAt));
+  check('the loan stays open — the item is still theirs',
+    savedLog && savedLog.returnedAt === null, savedLog && String(savedLog.returnedAt));
+  check('and the item was never released',
+    shelved && shelved.assignedTo !== null, shelved && String(shelved.assignedTo));
 
   console.log('\nAsking for several items at once');
   reqPage = await (await call('/admin/requests', inStudio)).text();

@@ -51,8 +51,8 @@ async function studioStats(locationId) {
     UsageLog.countDocuments({ ...match, returnedAt: { $gte: start, $lt: end } }),
     AssignmentRequest.countDocuments({ ...match, status: 'pending' }),
     Booking.countDocuments({ ...match, status: 'pending' }),
-    // Handed back, not yet checked in — off the shelf and unavailable
-    UsageLog.countDocuments({ ...match, returnedAt: { $ne: null }, acceptedAt: null }),
+    // Submitted by their holder, still with them, waiting on an admin
+    UsageLog.countDocuments({ ...match, submittedAt: { $ne: null }, returnedAt: null }),
     Product.aggregate([{ $match: match }, { $group: { _id: null, value: { $sum: '$price' } } }]),
   ]);
 

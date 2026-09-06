@@ -3,7 +3,7 @@ const Admin = require('../models/Admin');
 const Product = require('../models/Product');
 const AssignmentRequest = require('../models/AssignmentRequest');
 const Booking = require('../models/Booking');
-const { occupyProduct, submitProduct } = require('../services/occupancy');
+const { occupyProduct, requestSubmission } = require('../services/occupancy');
 const { createBooking } = require('../services/booking');
 const approvals = require('../services/approvals');
 const NextClaim = require('../models/NextClaim');
@@ -311,7 +311,7 @@ async function finishOccupy(bot, chatId, user, productId, reason, ack, query) {
         `📌 <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> is now with you.\n` +
         `Taken at ${formatWhen(product.occupiedAt)}\n` +
         `📝 For: ${escapeHtml(product.occupyReason || '—')}\n\n` +
-        `Tap <b>Submit item</b> when you bring it back.`;
+        `Tap <b>Submit for approval</b> when you bring it back.`;
 
       await send(bot, chatId, { text: confirmation, photo: product.imageUrl || null });
     } catch (err) {
@@ -435,7 +435,7 @@ async function handleMessage(bot, msg) {
           '/mine — what you are holding',
           '/logout — sign out of this chat',
           '',
-          'Tap <b>Occupy now</b> to take an item, and <b>Submit item</b> when you bring it back.',
+          'Tap <b>Occupy now</b> to take an item, and <b>Submit for approval</b> when you bring it back — it stays with you until the admin accepts it.',
         ].join('\n'),
         HTML
       );
@@ -550,14 +550,13 @@ async function handleMessage(bot, msg) {
       return bot.sendMessage(chatId, 'That one is not with you any more.');
     }
 
-    const log = await submitProduct({ product, source: 'telegram', remark });
+    const log = await requestSubmission({ product, source: 'telegram', remark });
 
     await bot.sendMessage(
       chatId,
-      `✅ <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> submitted.\n` +
-        `You had it for ${formatDuration(log ? log.durationMinutes : null)}.\n` +
+      `✅ <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> submitted for approval.\n` +
         `📝 Your remark: ${escapeHtml(remark)}\n\n` +
-        `Your studio admin will check it in — it goes back on the shelf after that.`,
+        `⚠️ It <b>stays with you</b> until your studio admin accepts it.`,
       HTML
     );
 
@@ -566,7 +565,7 @@ async function handleMessage(bot, msg) {
       `📦 <b>${escapeHtml(user.name)}</b> submitted <b>${escapeHtml(product.name)}</b> ` +
         `<code>${escapeHtml(product.assetTag)}</code>.\n` +
         `📝 Their remark: ${escapeHtml(remark)}\n` +
-        `It is waiting to be checked in → Requests.`
+        `It stays with them until you accept it → Requests.`
     );
 
     const fresh = await productFor(user, product._id);
@@ -1069,13 +1068,22 @@ async function handleCallback(bot, query) {
      * The item is not handed back on this tap — it goes back on the next
      * message, once they have said what state it is in.
      */
+    if (product.returnRequestedAt) {
+      await ack('Already submitted — waiting for the admin');
+      return bot.sendMessage(
+        chatId,
+        `⏳ <b>${escapeHtml(product.name)}</b> is already submitted. It stays with you until your admin accepts it.`,
+        HTML
+      );
+    }
+
     setSession(chatId, { stage: 'awaitSubmitRemark', productId: String(product._id) });
     await ack('Tell me how it is coming back');
     return bot.sendMessage(
       chatId,
-      `📦 Submitting <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code>.\n\n` +
+      `📦 Submitting <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> for approval.\n\n` +
         `How is it coming back? Reply with a short remark — send <b>NA</b> if nothing happened to it.\n` +
-        `Your studio admin adds their own note when they check it in.`,
+        `It stays with you until your admin accepts it, and they add their own note then.`,
       HTML
     );
   }

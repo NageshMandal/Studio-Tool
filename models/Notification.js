@@ -21,6 +21,8 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       enum: [
         'request-rejected',
+        // A submission the admin sent back — the item is still with them
+        'return-declined',
         'booking-declined',
         'booking-cancelled',
         'purchase-approved',

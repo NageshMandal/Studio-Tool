@@ -256,12 +256,12 @@ const PANELS = {
     if (query.studio) filter.location = query.studio;
     if (query.category) filter.category = query.category;
     if (query.status === 'out') filter.assignedTo = { $ne: null };
-    // Nobody holds a pending-return item, but it is not available either
     if (query.status === 'available') {
       filter.assignedTo = null;
       filter.status = 'available';
     }
-    if (query.status === 'pending-return') filter.status = 'pending-return';
+    // Out with somebody who has asked to hand it back
+    if (query.status === 'submitted') filter.returnRequestedAt = { $ne: null };
     if (query.q) {
       const rx = new RegExp(String(query.q).trim(), 'i');
       filter.$or = [{ name: rx }, { assetTag: rx }, { brand: rx }, { model: rx }];
@@ -300,7 +300,7 @@ const PANELS = {
             { value: '', label: 'Any status' },
             { value: 'available', label: 'Available' },
             { value: 'out', label: 'Out with someone' },
-            { value: 'pending-return', label: 'Waiting to be checked in' },
+            { value: 'submitted', label: 'Submitted, awaiting approval' },
           ],
         },
       ],
