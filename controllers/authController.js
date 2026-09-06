@@ -126,7 +126,7 @@ async function resolveStaff(email = '', password = '') {
 
 // Where an admin goes after signing in
 const adminLanding = (identity) =>
-  identity.adminRole === 'super' ? '/admin/studios' : '/admin/dashboard';
+  identity.adminRole === 'super' ? '/admin/master' : '/admin/dashboard';
 
 const renderLogin = (res, status, { error, email, role }) =>
   res.status(status).render('login', {
