@@ -40,16 +40,7 @@
       </div>
       <p class="stat-note"><%= totals.assigned %> items currently out</p>
     </div>
-    <div class="stat">
-      <div class="stat-head">
-        <div>
-          <span class="stat-label">Awaiting a decision</span>
-          <div class="stat-value"><%= totals.pending %></div>
-        </div>
-        <span class="stat-ico" style="background: var(--amber-soft); color: var(--amber)"><%- icon('inbox', 18) %></span>
-      </div>
-      <p class="stat-note">Across all studios</p>
-    </div>
+    
   </section>
 
   <p class="section-title">Studios at a glance</p>
@@ -71,9 +62,9 @@
         </div>
 
         <div class="studio-summary-figures">
-          <div><span>Total</span><b><%= c.stats.totalItems %></b></div>
+          <div><span>Items</span><b><%= c.stats.totalItems %></b></div>
           <div><span>Available</span><b><%= c.stats.availableItems %></b></div>
-          <div><span>Pending</span><b><%= c.stats.pendingTotal %></b></div>
+          <div><span>Pending Approvals</span><b><%= c.stats.pendingTotal %></b></div>
         </div>
 
         <div class="foot">
