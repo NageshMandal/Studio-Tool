@@ -2,7 +2,12 @@
   // The same availability rules the server enforces, mirrored here so a
   // button is never offered for something the action would refuse.
   function blocked(p) {
-    return p.condition === 'retired' || p.status === 'maintenance' || p.condition === 'needs-repair';
+    return (
+      p.condition === 'retired' ||
+      p.status === 'maintenance' ||
+      p.status === 'pending-return' ||
+      p.condition === 'needs-repair'
+    );
   }
 %>
 
@@ -53,6 +58,41 @@
   </form>
 </section>
 
+<%
+  /**
+   * Asking for several items at once.
+   *
+   * The form lives here, on its own, while its checkboxes sit inside the
+   * item cards further down. They are tied together by the HTML `form`
+   * attribute rather than by nesting, because each card already contains its
+   * own form and forms cannot be nested — doing it the obvious way would
+   * produce markup browsers quietly rearrange.
+   */
+%>
+<form method="POST" action="/staff/requests" id="bulkRequest" class="panel bulk-bar" hidden>
+  <div class="bulk-count">
+    <b id="bulkCount">0</b> selected
+  </div>
+  <label class="field">
+    <span>What are they for?</span>
+    <input type="text" name="reason" maxlength="120" required
+           placeholder="One reason for all of them" />
+  </label>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">
+      <%= user.accountType === 'power' ? 'Take selected' : 'Ask for selected' %>
+    </button>
+    <button class="btn btn-ghost" type="button" id="bulkClear">Clear</button>
+  </div>
+  <p class="hint bulk-note">
+    <% if (user.accountType === 'power') { %>
+      Anything unavailable is skipped and named, rather than failing the lot.
+    <% } else { %>
+      Your admin can approve them all at once, or approve some and decline others.
+    <% } %>
+  </p>
+</form>
+
 <% if (groups.length === 0) { %>
   <div class="panel">
     <div class="empty">
@@ -76,8 +116,18 @@
         var claim = claimByProduct[String(p._id)];
         var booked = bookedTodayByProduct[String(p._id)];
       %>
+      <%
+        // Selectable only when asking for it would actually succeed — the
+        // same test the server applies, so a tick is never a false promise
+        var selectable = !mine && !pending && !p.assignedTo && !blocked(p) &&
+          !(booked && String(booked.user) !== String(user._id));
+      %>
       <div class="item-card">
         <div class="top">
+          <% if (selectable) { %>
+            <input class="bulk-tick" type="checkbox" name="items" value="<%= p._id %>"
+                   form="bulkRequest" aria-label="Select <%= p.name %>" />
+          <% } %>
           <%- include('../partials/thumb', { thumbUrl: p.imageUrl, thumbName: p.name }) %>
           <div style="min-width: 0">
             <h4><%= p.name %></h4>
@@ -103,8 +153,17 @@
         </div>
 
         <% if (mine) { %>
-          <form method="POST" action="/staff/return/<%= p._id %>">
-            <button class="btn btn-primary btn-sm btn-block" type="submit">Submit item</button>
+          <form method="POST" action="/staff/return/<%= p._id %>" class="submit-form">
+            <label class="field">
+              <span>How is it coming back?</span>
+              <input type="text" name="remark" maxlength="300" required
+                     placeholder="Type NA if nothing happened" />
+              <span class="help">
+                Say if anything happened to it. Your admin adds their own note
+                when they check it in, so both accounts are kept.
+              </span>
+            </label>
+            <button class="btn btn-primary btn-block btn-sm" type="submit">Submit item</button>
           </form>
 
         <% } else if (pending) { %>

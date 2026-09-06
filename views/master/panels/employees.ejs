@@ -1,0 +1,32 @@
+<%- include('./_filters', { panel: 'employees', fields: fields, query: query }) %>
+
+<p class="panel-lede">
+  <%= total %> staff member<%= total === 1 ? '' : 's' %>.
+  <% if (truncated) { %>Showing the first <%= users.length %>.<% } %>
+</p>
+
+<% if (users.length === 0) { %>
+  <p class="panel-empty">Nobody on record yet.</p>
+<% } else { %>
+  <ul class="panel-list">
+    <% users.forEach(function (u) { %>
+      <li class="panel-row">
+        <span class="avatar"><%= (u.name || '?').trim().charAt(0).toUpperCase() %></span>
+        <span class="panel-row-main">
+          <b><%= u.name %></b>
+          <span class="panel-row-sub">
+            <%= u.studioName %><%= u.department ? ' · ' + u.department : '' %><%= u.designation ? ' · ' + u.designation : '' %>
+          </span>
+        </span>
+        <span class="panel-row-actions">
+          <span class="badge <%= u.status === 'active' ? 'badge-green' : 'badge-grey' %>">
+            <%= u.status === 'active' ? 'Active' : 'Inactive' %>
+          </span>
+          <button class="btn btn-ghost btn-sm" type="button"
+                  data-panel="employee" data-params="id=<%= u._id %>"
+                  data-title="<%= u.name %>">View</button>
+        </span>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>

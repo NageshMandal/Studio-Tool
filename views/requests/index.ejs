@@ -1,3 +1,118 @@
+<%
+  /**
+   * One request card. Declared once and called from both the batch groups
+   * and the ungrouped list, so an item asked for as part of five looks and
+   * behaves exactly like one asked for on its own — including its own
+   * Approve and Decline, which is what makes a partial decision possible.
+   */
+  function requestCard(r) {
+%>
+  <div class="request-card">
+    <div class="request-head">
+      <div>
+        <h3><%= r.productName %></h3>
+        <div class="request-meta">
+          <span class="asset-tag"><%= r.assetTag %></span>
+          <span><%- icon('user', 13) %> <%= r.userName %></span>
+          <span><%= formatWhen(r.createdAt) %></span>
+        </div>
+      </div>
+    </div>
+
+    <% if (r.reason) { %><p class="request-body"><%= r.reason %></p><% } %>
+
+    <% if (r.productGone) { %>
+      <div class="alert alert-error" style="margin: 12px 0 0">That item is no longer on the register.</div>
+    <% } else if (r.productBusy) { %>
+      <div class="alert alert-warn" style="margin: 12px 0 0">Somebody else already has this item.</div>
+    <% } else if (r.productBlocked) { %>
+      <div class="alert alert-warn" style="margin: 12px 0 0">This item is in maintenance or retired.</div>
+    <% } %>
+
+    <div class="request-actions">
+      <form method="POST" action="/admin/requests/<%= r._id %>/approve">
+        <button class="btn btn-ok btn-sm" type="submit"><%- icon('check', 14) %> Approve</button>
+      </form>
+      <form method="POST" action="/admin/requests/<%= r._id %>/reject" data-note="Reason for declining (optional):">
+        <input type="hidden" name="note" />
+        <button class="btn btn-danger btn-sm" type="submit">Decline</button>
+      </form>
+    </div>
+  </div>
+<%
+  }
+%>
+
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Items to check in</h2>
+      <p class="sub">Handed back by staff, waiting for you to look at them</p>
+    </div>
+    <span class="badge <%= submitted.length ? 'badge-amber' : 'badge-green' %>">
+      <%= submitted.length %> waiting
+    </span>
+  </div>
+
+  <div class="panel-body">
+    <% if (submitted.length === 0) { %>
+      <div class="empty"><p>Nothing is waiting to be checked in.</p></div>
+    <% } else { %>
+      <p class="hint" style="margin-bottom: 12px">
+        These items are off the shelf and nobody can take them until you check
+        them in, so anyone waiting on one is waiting on this list.
+      </p>
+
+      <% submitted.forEach(function (l) { %>
+        <div class="request-card">
+          <div class="request-head">
+            <div>
+              <h3><%= l.productName %></h3>
+              <div class="request-meta">
+                <span class="asset-tag"><%= l.assetTag %></span>
+                <span><%- icon('user', 13) %> <%= l.userName %></span>
+                <span>Submitted <%= formatWhen(l.returnedAt) %></span>
+                <span>Held <%= formatDuration(l.durationMinutes) %></span>
+              </div>
+            </div>
+          </div>
+
+          <p class="request-body">
+            <b>Their remark:</b> <%= l.submitRemark || 'None given' %>
+          </p>
+
+          <form method="POST" action="/admin/returns/<%= l._id %>/accept" class="checkin-form">
+            <label class="field">
+              <span>Your remark</span>
+              <input type="text" name="remark" maxlength="300" required
+                     placeholder="NA if it came back fine" />
+              <span class="help">
+                Both remarks stay on this movement, so if something happened to
+                the item there are two accounts of it with times against them.
+              </span>
+            </label>
+
+            <label class="field">
+              <span>Condition</span>
+              <select name="condition">
+                <option value="">Leave as it is</option>
+                <option value="good">Good</option>
+                <option value="new">As new</option>
+                <option value="needs-repair">Needs repair</option>
+                <option value="retired">Retire it</option>
+              </select>
+              <span class="help">Marking it for repair sends it to maintenance instead of the shelf.</span>
+            </label>
+
+            <div class="actions">
+              <button class="btn btn-ok btn-sm" type="submit"><%- icon('check', 14) %> Check in</button>
+            </div>
+          </form>
+        </div>
+      <% }); %>
+    <% } %>
+  </div>
+</section>
 
 <section class="panel">
   <div class="panel-head">
@@ -14,41 +129,45 @@
     <% if (pending.length === 0) { %>
       <div class="empty"><p>No equipment requests are waiting.</p></div>
     <% } else { %>
-      <% pending.forEach(function (r) { %>
-        <div class="request-card">
-          <div class="request-head">
+
+      <%
+        /* Batches first: somebody asking for a camera, a lens and a tripod
+           for one shoot is one decision most of the time, and five separate
+           cards would hide that they belong together. */
+      %>
+      <% batches.forEach(function (b) { %>
+        <div class="batch">
+          <div class="batch-head">
             <div>
-              <h3><%= r.productName %></h3>
-              <div class="request-meta">
-                <span class="asset-tag"><%= r.assetTag %></span>
-                <span><%- icon('user', 13) %> <%= r.userName %></span>
-                <span><%= formatWhen(r.createdAt) %></span>
-              </div>
+              <h3><%= b.userName %> asked for <%= b.items.length %> items together</h3>
+              <p class="hint">
+                <%= formatWhen(b.createdAt) %><%= b.reason ? ' · ' + b.reason : '' %>
+              </p>
+            </div>
+            <div class="btn-row">
+              <form method="POST" action="/admin/requests/batch/<%= b.batch %>/approve">
+                <button class="btn btn-ok btn-sm" type="submit">
+                  <%- icon('check', 14) %> Approve all <%= b.items.length %>
+                </button>
+              </form>
+              <form method="POST" action="/admin/requests/batch/<%= b.batch %>/reject"
+                    data-note="Reason for declining all of them (optional):">
+                <input type="hidden" name="note" />
+                <button class="btn btn-danger btn-sm" type="submit">Decline all</button>
+              </form>
             </div>
           </div>
 
-          <% if (r.reason) { %><p class="request-body"><%= r.reason %></p><% } %>
+          <p class="hint batch-note">
+            Or decide them one at a time — approving some and declining the
+            rest is fine, and the batch simply shrinks.
+          </p>
 
-          <% if (r.productGone) { %>
-            <div class="alert alert-error" style="margin: 12px 0 0">That item is no longer on the register.</div>
-          <% } else if (r.productBusy) { %>
-            <div class="alert alert-warn" style="margin: 12px 0 0">Somebody else already has this item.</div>
-          <% } else if (r.productBlocked) { %>
-            <div class="alert alert-warn" style="margin: 12px 0 0">This item is in maintenance or retired.</div>
-          <% } %>
-
-          <div class="request-actions">
-            <form method="POST" action="/admin/requests/<%= r._id %>/approve">
-              <button class="btn btn-ok btn-sm" type="submit"><%- icon('check', 14) %> Approve</button>
-            </form>
-            <form method="POST" action="/admin/requests/<%= r._id %>/reject"
-                  onsubmit="var n = prompt('Reason for declining (optional):'); if (n === null) return false; this.note.value = n; return true;">
-              <input type="hidden" name="note" />
-              <button class="btn btn-danger btn-sm" type="submit">Decline</button>
-            </form>
-          </div>
+          <% b.items.forEach(function (r) { requestCard(r); }); %>
         </div>
       <% }); %>
+
+      <% loose.forEach(function (r) { requestCard(r); }); %>
     <% } %>
   </div>
 </section>

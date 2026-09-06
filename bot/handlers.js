@@ -3,7 +3,7 @@ const Admin = require('../models/Admin');
 const Product = require('../models/Product');
 const AssignmentRequest = require('../models/AssignmentRequest');
 const Booking = require('../models/Booking');
-const { occupyProduct, releaseProduct } = require('../services/occupancy');
+const { occupyProduct, submitProduct } = require('../services/occupancy');
 const { createBooking } = require('../services/booking');
 const approvals = require('../services/approvals');
 const NextClaim = require('../models/NextClaim');
@@ -522,6 +522,57 @@ async function handleMessage(bot, msg) {
     return finishClaim(bot, chatId, user, session.productId, reason, null, null);
   }
 
+  /**
+   * Someone typing the remark that goes with an item they are handing back.
+   *
+   * The item is only released once this arrives, so a submission can never
+   * end up on the record with nothing said about the item's condition —
+   * which is the single thing this whole step exists to guarantee.
+   */
+  if (session && session.stage === 'awaitSubmitRemark') {
+    const user = await signedInUser(chatId);
+    if (!user) {
+      clearSession(chatId);
+      setSession(chatId, { stage: 'awaitEmail' });
+      return askForEmail(bot, chatId);
+    }
+
+    const remark = text.slice(0, 300);
+    if (remark.length < 2) {
+      return bot.sendMessage(chatId, 'Please send a short remark — <b>NA</b> is fine if nothing happened.', HTML);
+    }
+
+    const product = await productFor(user, session.productId, false);
+    clearSession(chatId);
+    if (!product) return send(bot, chatId, views.mainMenu(user));
+
+    if (!product.assignedTo || String(product.assignedTo) !== String(user._id)) {
+      return bot.sendMessage(chatId, 'That one is not with you any more.');
+    }
+
+    const log = await submitProduct({ product, source: 'telegram', remark });
+
+    await bot.sendMessage(
+      chatId,
+      `✅ <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> submitted.\n` +
+        `You had it for ${formatDuration(log ? log.durationMinutes : null)}.\n` +
+        `📝 Your remark: ${escapeHtml(remark)}\n\n` +
+        `Your studio admin will check it in — it goes back on the shelf after that.`,
+      HTML
+    );
+
+    notifyLocationAdmins(
+      product.location,
+      `📦 <b>${escapeHtml(user.name)}</b> submitted <b>${escapeHtml(product.name)}</b> ` +
+        `<code>${escapeHtml(product.assetTag)}</code>.\n` +
+        `📝 Their remark: ${escapeHtml(remark)}\n` +
+        `It is waiting to be checked in → Requests.`
+    );
+
+    const fresh = await productFor(user, product._id);
+    return send(bot, chatId, await itemDetailView(fresh, user));
+  }
+
   // Someone typing the reason they need an item for
   if (session && session.stage === 'awaitReason') {
     const user = await signedInUser(chatId);
@@ -1013,16 +1064,20 @@ async function handleCallback(bot, query) {
       return replace(bot, query, await itemDetailView(fresh, user));
     }
 
-    const log = await releaseProduct({ product, source: 'telegram' });
-    await ack('Returned — thank you');
-    await bot.sendMessage(
+    /**
+     * Submitting now asks for a remark first, the same as the website does.
+     * The item is not handed back on this tap — it goes back on the next
+     * message, once they have said what state it is in.
+     */
+    setSession(chatId, { stage: 'awaitSubmitRemark', productId: String(product._id) });
+    await ack('Tell me how it is coming back');
+    return bot.sendMessage(
       chatId,
-      `✅ <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code> is back on the shelf.\nYou had it for ${formatDuration(log ? log.durationMinutes : null)}.`,
+      `📦 Submitting <b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag)}</code>.\n\n` +
+        `How is it coming back? Reply with a short remark — send <b>NA</b> if nothing happened to it.\n` +
+        `Your studio admin adds their own note when they check it in.`,
       HTML
     );
-
-    const fresh = await productFor(user, product._id);
-    return replace(bot, query, await itemDetailView(fresh, user));
   }
 
   return ack();

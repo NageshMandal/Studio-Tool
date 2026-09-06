@@ -43,9 +43,7 @@
             <span class="avatar"><%= (admin.name || 'A').trim().charAt(0).toUpperCase() %></span>
             <span>
               <span class="whoami-name"><%= admin.name %></span>
-              <span class="whoami-role">
-                <%= can.isSuper ? 'Super admin' : (can.isLocationAdmin ? 'Location admin' : 'Location manager') %>
-              </span>
+              <span class="whoami-role"><%= can.roleLabel %></span>
             </span>
           </div>
         </div>

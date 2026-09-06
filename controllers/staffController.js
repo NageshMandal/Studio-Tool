@@ -1,11 +1,12 @@
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Product = require('../models/Product');
 const AssignmentRequest = require('../models/AssignmentRequest');
 const Booking = require('../models/Booking');
 const NextClaim = require('../models/NextClaim');
 const ProcurementRequest = require('../models/ProcurementRequest');
-const { occupyProduct, releaseProduct } = require('../services/occupancy');
+const { occupyProduct, submitProduct } = require('../services/occupancy');
 const { createBooking } = require('../services/booking');
 const { createClaim, releaseForClaim, keepDespiteClaim } = require('../services/claims');
 const notifications = require('../services/notifications');
@@ -23,7 +24,7 @@ const { CATEGORIES } = require('../models/Product');
  * every query below is scoped by something the person cannot influence.
  */
 
-const STATUSES = ['available', 'assigned', 'maintenance'];
+const STATUSES = ['available', 'assigned', 'maintenance', 'pending-return'];
 
 // Everything this person may see
 const mine = (req, extra = {}) => ({ ...extra, location: req.studioId });
@@ -427,17 +428,157 @@ exports.occupy = async (req, res, next) => {
   }
 };
 
-// POST /staff/return/:id
+/**
+ * POST /staff/return/:id — hand an item back, with a remark on its condition.
+ *
+ * The remark is required and has no default. "NA" is a fine answer and the
+ * usual one, but it has to be typed: a note that filled itself in would be
+ * worth nothing the day an item actually comes back damaged, which is the
+ * only day this record matters.
+ */
 exports.returnItem = async (req, res, next) => {
   try {
     const user = req.staff;
+    const remark = (req.body.remark || '').trim().slice(0, 300);
+
+    if (remark.length < 2) {
+      return back(
+        req,
+        res,
+        'Add a remark about the item before submitting it — type NA if nothing happened'
+      );
+    }
+
     const product = await Product.findOne(mine(req, { _id: req.params.id }));
     if (!product) return back(req, res, 'That item is not at your studio');
     if (!product.assignedTo || String(product.assignedTo) !== String(user._id)) {
       return back(req, res, 'That one is not with you');
     }
-    await releaseProduct({ product, source: 'web' });
-    back(req, res, `${product.name} is back on the shelf — thank you`);
+
+    await submitProduct({ product, source: 'web', remark });
+
+    notifyLocationAdmins(
+      req.studioId,
+      `\ud83d\udce6 <b>${escapeHtml(user.name)}</b> submitted ` +
+        `<b>${escapeHtml(product.name)}</b> <code>${escapeHtml(product.assetTag || '')}</code>.\n` +
+        `\ud83d\udcdd Their remark: ${escapeHtml(remark)}\n` +
+        `It is waiting for you to check it in \u2192 Requests.`
+    );
+
+    back(
+      req,
+      res,
+      `${product.name} submitted — it is with your studio admin to check in`
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /staff/requests — ask for several items at once.
+ *
+ * One reason covers the whole batch, because in practice a person is taking
+ * a camera, a lens and a tripod out for the same shoot. Each item still
+ * becomes its own request row sharing a batch id, so the admin can approve
+ * three and decline two without the whole thing being all-or-nothing.
+ *
+ * A power account occupies directly, as it does for a single item; the same
+ * batch runs through the same loop either way, so the two paths cannot drift.
+ */
+exports.requestMany = async (req, res, next) => {
+  try {
+    const user = req.staff;
+    const reason = (req.body.reason || '').trim().slice(0, 120);
+
+    const ids = []
+      .concat(req.body.items || [])
+      .map((id) => String(id).trim())
+      .filter(Boolean);
+
+    if (ids.length === 0) return back(req, res, 'Pick at least one item first');
+    if (reason.length < 2) return back(req, res, 'Please give a short reason first');
+
+    const products = await Product.find(mine(req, { _id: { $in: ids } }));
+    if (products.length === 0) return back(req, res, 'None of those items are at your studio');
+
+    const isPower = user.accountType === 'power';
+    const batch = isPower ? null : new mongoose.Types.ObjectId().toString();
+
+    const taken = [];
+    const requested = [];
+    const skipped = [];
+
+    for (const product of products) {
+      if (isPower) {
+        try {
+          await occupyProduct({ product, user, reason, source: 'web' });
+          taken.push(product.name);
+        } catch (err) {
+          skipped.push(`${product.name} (${err.message})`);
+        }
+        continue;
+      }
+
+      // Normal account: file a request per item, all sharing one batch
+      if (product.assignedTo) {
+        skipped.push(`${product.name} (someone has it)`);
+        continue;
+      }
+      if (
+        product.condition === 'retired' ||
+        product.status === 'maintenance' ||
+        product.status === 'pending-return' ||
+        product.condition === 'needs-repair'
+      ) {
+        skipped.push(`${product.name} (not available)`);
+        continue;
+      }
+
+      const duplicate = await AssignmentRequest.findOne({
+        user: user._id,
+        product: product._id,
+        status: 'pending',
+      });
+      if (duplicate) {
+        skipped.push(`${product.name} (already asked)`);
+        continue;
+      }
+
+      await AssignmentRequest.create({
+        location: req.studioId,
+        locationName: user.location ? user.location.name : null,
+        product: product._id,
+        productName: product.name,
+        assetTag: product.assetTag,
+        imageUrl: product.imageUrl || null,
+        user: user._id,
+        userName: user.name,
+        reason: reason || null,
+        batch,
+      });
+      requested.push(product.name);
+    }
+
+    if (requested.length) {
+      notifyLocationAdmins(
+        req.studioId,
+        `\ud83d\ude4b <b>${escapeHtml(user.name)}</b> is asking for ` +
+          `<b>${requested.length} item${requested.length === 1 ? '' : 's'}</b> (from the website).\n` +
+          `${escapeHtml(requested.join(', '))}\n` +
+          (reason ? `\ud83d\udcdd ${escapeHtml(reason)}\n` : '') +
+          `Decide them together or one by one in the panel \u2192 Requests.`
+      );
+    }
+
+    // One honest sentence about each outcome, rather than a cheerful summary
+    // that hides the two items the person did not get
+    const parts = [];
+    if (taken.length) parts.push(`${taken.length} now with you`);
+    if (requested.length) parts.push(`${requested.length} sent to your admin`);
+    if (skipped.length) parts.push(`${skipped.length} skipped: ${skipped.join(', ')}`);
+
+    back(req, res, parts.join(' · ') || 'Nothing to do');
   } catch (err) {
     next(err);
   }

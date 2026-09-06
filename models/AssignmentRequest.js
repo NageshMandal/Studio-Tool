@@ -28,6 +28,17 @@ const assignmentRequestSchema = new mongoose.Schema(
 
     reason: { type: String, trim: true, maxlength: 120, default: null },
 
+    /**
+     * Requests asked for together share a batch id.
+     *
+     * The alternative — one document holding an array of items — was not
+     * taken, because an admin needs to approve three of five and decline the
+     * rest. Keeping each item its own row means partial decisions are the
+     * normal case rather than a special one, and the batch is only what ties
+     * them together on screen and for "approve all".
+     */
+    batch: { type: String, trim: true, default: null, index: true },
+
     status: {
       type: String,
       enum: ['pending', 'approved', 'rejected', 'cancelled'],
@@ -45,5 +56,6 @@ const assignmentRequestSchema = new mongoose.Schema(
 
 assignmentRequestSchema.index({ location: 1, status: 1, createdAt: -1 });
 assignmentRequestSchema.index({ user: 1, product: 1, status: 1 });
+assignmentRequestSchema.index({ batch: 1, status: 1 });
 
 module.exports = mongoose.model('AssignmentRequest', assignmentRequestSchema);

@@ -6,10 +6,10 @@ const Location = require('../models/Location');
  *
  * Who can create whom:
  *
- *   super admin     → super admins, location admins, location managers,
- *                     at any studio.
- *   location admin  → location managers, AT THEIR OWN STUDIO ONLY.
- *   location manager→ nobody.
+ *   super admin        → super admins, location admins, location sub admins,
+ *                        at any studio.
+ *   location admin     → location sub admins, AT THEIR OWN STUDIO ONLY.
+ *   location sub admin → nobody.
  *
  * Two rules protect the system from locking itself out:
  *   - nobody can deactivate or delete themselves;
@@ -25,14 +25,14 @@ const ROLE_LABELS = Admin.ROLE_LABELS;
 
 /** Which roles this admin is allowed to hand out. */
 function assignableRoles(admin) {
-  if (admin.adminRole === 'super') return ['super', 'location_admin', 'location_manager'];
-  if (admin.adminRole === 'location_admin') return ['location_manager'];
+  if (admin.adminRole === 'super') return ['super', 'location_admin', 'location_sub_admin'];
+  if (admin.adminRole === 'location_admin') return ['location_sub_admin'];
   return [];
 }
 
 /**
  * Can `me` act on the account `target`? A super admin can act on anyone but
- * themselves. A location admin can act only on managers at their own studio
+ * themselves. A location admin can act only on sub admins at their own studio
  * — never on another location admin, and never on a super admin.
  */
 function mayManage(me, target) {
@@ -40,7 +40,7 @@ function mayManage(me, target) {
   if (me.adminRole === 'super') return true;
   if (me.adminRole !== 'location_admin') return false;
   return (
-    target.role === 'location_manager' &&
+    target.role === 'location_sub_admin' &&
     String(target.location) === String(me.location)
   );
 }
@@ -165,7 +165,7 @@ exports.create = async (req, res, next) => {
         const existing = await Admin.findOne({ location, role: 'location_admin' }).lean();
         if (existing) {
           return rerender(
-            `${studio.name} already has a location admin (${existing.name}). Add this person as a location manager instead, or change the existing admin first.`,
+            `${studio.name} already has a location admin (${existing.name}). Add this person as a location sub admin instead, or change the existing admin first.`,
             req.body
           );
         }

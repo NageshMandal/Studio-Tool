@@ -1,0 +1,26 @@
+<%
+  /* Panel: the category split. Each row drills into the items themselves,
+     which is the question a share of the register usually raises next. */
+%>
+<%- include('./_filters', { panel: 'categories', fields: fields, query: query }) %>
+
+<p class="panel-lede">How the register splits by category. Pick one to see its items.</p>
+
+<ul class="panel-list">
+  <% categories.forEach(function (c) { %>
+    <li class="panel-row is-clickable"
+        data-panel="items" data-params="category=<%= encodeURIComponent(c.category) %>"
+        data-title="<%= c.category %> items">
+      <span class="panel-row-main">
+        <b><%= c.category %></b>
+        <span class="bar-row" style="padding: 6px 0 0">
+          <span class="track"><span class="fill" style="width: <%= c.pct %>%"></span></span>
+        </span>
+      </span>
+      <span class="panel-row-actions">
+        <b><%= c.total %></b>
+        <span class="panel-row-sub"><%= c.pct %>%</span>
+      </span>
+    </li>
+  <% }); %>
+</ul>

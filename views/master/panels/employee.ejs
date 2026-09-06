@@ -1,0 +1,62 @@
+<div class="panel-hero">
+  <span class="avatar avatar-lg"><%= (user.name || '?').trim().charAt(0).toUpperCase() %></span>
+  <div>
+    <h3><%= user.name %></h3>
+    <p class="panel-row-sub">
+      <%= user.studioName %><%= user.designation ? ' · ' + user.designation : '' %>
+    </p>
+    <span class="badge <%= user.status === 'active' ? 'badge-green' : 'badge-grey' %>">
+      <%= user.status === 'active' ? 'Active' : 'Inactive' %>
+    </span>
+  </div>
+</div>
+
+<div class="detail-list">
+  <div><span>Employee ID</span><b><%= user.employeeId || '—' %></b></div>
+  <div><span>Department</span><b><%= user.department || '—' %></b></div>
+  <div><span>Email</span><b><%= user.email || '—' %></b></div>
+  <div><span>Phone</span><b><%= user.phone || '—' %></b></div>
+</div>
+
+<p class="panel-section">Holding now (<%= holding.length %>)</p>
+<% if (holding.length === 0) { %>
+  <p class="panel-empty">Nothing out at the moment.</p>
+<% } else { %>
+  <ul class="panel-list">
+    <% holding.forEach(function (i) { %>
+      <li class="panel-row">
+        <%- include('../../partials/thumb', { thumbUrl: i.imageUrl, thumbName: i.name }) %>
+        <span class="panel-row-main">
+          <b><%= i.name %></b>
+          <span class="panel-row-sub"><span class="asset-tag"><%= i.assetTag %></span> <%= formatSince(i.occupiedAt) %></span>
+        </span>
+        <span class="panel-row-actions">
+          <button class="btn btn-ghost btn-sm" type="button"
+                  data-panel="item" data-params="id=<%= i._id %>"
+                  data-title="<%= i.name %>">View</button>
+        </span>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>
+
+<p class="panel-section">Recent movements</p>
+<% if (history.length === 0) { %>
+  <p class="panel-empty">No movements on record.</p>
+<% } else { %>
+  <ul class="panel-list">
+    <% history.forEach(function (h) { %>
+      <li class="panel-row">
+        <span class="panel-row-main">
+          <b><%= h.productName %></b>
+          <span class="panel-row-sub"><%= formatWhen(h.occupiedAt) %> · <%= h.locationName || '' %></span>
+        </span>
+        <span class="panel-row-actions">
+          <span class="badge <%= h.returnedAt ? 'badge-green' : 'badge-amber' %>">
+            <%= h.returnedAt ? 'Returned' : 'Still out' %>
+          </span>
+        </span>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>

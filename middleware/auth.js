@@ -117,23 +117,31 @@ const protect = async (req, res, next) => {
 function capabilities(admin) {
   const isSuper = admin.adminRole === 'super';
   const isLocationAdmin = admin.adminRole === 'location_admin';
-  const isManager = admin.adminRole === 'location_manager';
+  const isSubAdmin = admin.adminRole === 'location_sub_admin';
 
   return {
     isSuper,
     isLocationAdmin,
-    isManager,
+    isSubAdmin,
+
+    /**
+     * The name for this role as a person should see it. Views take it from
+     * here rather than spelling it out, so renaming a tier is one edit in
+     * Admin.ROLE_LABELS instead of a hunt through the templates — which is
+     * exactly how "Location manager" ended up written out in five places.
+     */
+    roleLabel: Admin.ROLE_LABELS[admin.adminRole] || 'Admin',
 
     // Only the super admin works across studios
     viewAllStudios: isSuper,
     switchStudio: isSuper,
     manageStudios: isSuper,
 
-    // Super admins create location admins; location admins create managers.
-    // A manager creates nobody.
+    // Super admins create location admins; location admins create sub admins.
+    // A sub admin creates nobody.
     manageAdmins: isSuper || isLocationAdmin,
 
-    // Deleting is a primary-admin action; managers can add and edit only
+    // Deleting is a primary-admin action; sub admins can add and edit only
     deleteItems: isSuper || isLocationAdmin,
     deletePeople: isSuper || isLocationAdmin,
     managePeople: true,
@@ -143,7 +151,7 @@ function capabilities(admin) {
      * Staff purchase requests belong to the studio, not to head office.
      * The super admin is deliberately excluded — see ProcurementRequest.
      */
-    viewProcurement: isLocationAdmin || isManager,
+    viewProcurement: isLocationAdmin || isSubAdmin,
     decideProcurement: isLocationAdmin,
 
     viewReports: true,
@@ -179,7 +187,7 @@ const blockSuper = (req, res, next) => {
 
 // Primary admins only (super or location admin) — never a manager
 const requirePrimaryAdmin = (req, res, next) => {
-  if (req.admin && req.admin.adminRole !== 'location_manager') return next();
+  if (req.admin && req.admin.adminRole !== 'location_sub_admin') return next();
   return deny(req, res, 'This action is limited to the primary admin of the studio.');
 };
 

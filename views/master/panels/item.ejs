@@ -1,0 +1,75 @@
+<%
+  /* Panel: one item in detail, with its recent history.
+     Editing still happens inside the item's own studio — the link below
+     opens that studio first, because every edit screen is studio-scoped and
+     pretending otherwise here would break the moment you pressed Save. */
+%>
+<div class="panel-hero">
+  <%- include('../../partials/thumb', { thumbUrl: item.imageUrl, thumbName: item.name }) %>
+  <div>
+    <h3><%= item.name %></h3>
+    <p class="panel-row-sub">
+      <span class="asset-tag"><%= item.assetTag %></span> <%= item.studioName %>
+    </p>
+    <% if (item.assignedTo) { %>
+      <span class="badge badge-amber">With <%= item.assignedTo.name %> · <%= formatSince(item.occupiedAt) %></span>
+    <% } else { %>
+      <span class="badge badge-green">Available</span>
+    <% } %>
+  </div>
+</div>
+
+<div class="detail-list">
+  <div><span>Category</span><b><%= item.category || '—' %></b></div>
+  <div><span>Brand / model</span><b><%= [item.brand, item.model].filter(Boolean).join(' ') || '—' %></b></div>
+  <div><span>Serial</span><b><%= item.serialNumber || '—' %></b></div>
+  <div><span>Condition</span><b><%= item.condition || '—' %></b></div>
+  <div><span>Storage</span><b><%= item.storageArea || '—' %></b></div>
+  <div><span>Value</span><b><%= formatMoney(item.price) %></b></div>
+</div>
+
+<p class="panel-section">Recent movements</p>
+<% if (history.length === 0) { %>
+  <p class="panel-empty">This item has not moved yet.</p>
+<% } else { %>
+  <ul class="panel-list">
+    <% history.forEach(function (h) { %>
+      <li class="panel-row">
+        <span class="panel-row-main">
+          <b><%= h.userName %></b>
+          <span class="panel-row-sub"><%= formatWhen(h.occupiedAt) %><%= h.reason ? ' · ' + h.reason : '' %></span>
+          <%
+            /* Both accounts of how the item came back, side by side. This is
+               the record the two-step return exists to produce, so the item's
+               own history is where it has to be readable. */
+          %>
+          <% if (h.submitRemark) { %>
+            <span class="panel-row-sub">
+              <b>Staff:</b> <%= h.submitRemark %>
+            </span>
+          <% } %>
+          <% if (h.acceptRemark) { %>
+            <span class="panel-row-sub">
+              <b>Admin:</b> <%= h.acceptRemark %><%= h.acceptedBy ? ' (' + h.acceptedBy + ')' : '' %>
+            </span>
+          <% } %>
+        </span>
+        <span class="panel-row-actions">
+          <% if (!h.returnedAt) { %>
+            <span class="badge badge-amber">Still out</span>
+          <% } else if (!h.acceptedAt) { %>
+            <span class="badge badge-purple">Waiting to be checked in</span>
+          <% } else { %>
+            <span class="badge badge-green">Checked in</span>
+          <% } %>
+        </span>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>
+
+<div class="form-actions" style="margin-top: 16px">
+  <a class="btn btn-primary btn-sm" href="/admin/studios/open/<%= item.location %>">
+    Open <%= item.studioName %> to edit this item
+  </a>
+</div>

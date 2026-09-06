@@ -68,7 +68,7 @@ async function notifyLocationAdmins(locationId, text, keyboard = null) {
       {
         location: locationId,
         status: 'active',
-        role: { $in: ['location_admin', 'location_manager'] },
+        role: { $in: ['location_admin', 'location_sub_admin'] },
         telegramChatId: { $ne: null },
       },
       'telegramChatId'

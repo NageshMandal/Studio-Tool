@@ -41,7 +41,12 @@
       </div>
       <span class="stat-ico"><%- icon('alert', 18) %></span>
     </div>
-    <p class="stat-note"><%= stats.pendingRequests %> requests · <%= stats.pendingBookings %> bookings</p>
+    <p class="stat-note">
+      <%= stats.pendingRequests %> requests · <%= stats.pendingBookings %> bookings
+      <% if (stats.pendingCheckIns > 0) { %>
+        · <%= stats.pendingCheckIns %> to check in
+      <% } %>
+    </p>
   </div>
 </section>
 
@@ -52,6 +57,17 @@
   var todo = [];
   if (stats.pendingTotal > 0) {
     todo.push({ href: '/admin/requests', label: stats.pendingTotal + ' equipment request' + (stats.pendingTotal === 1 ? '' : 's') + ' to decide' });
+  }
+  if (stats.pendingCheckIns > 0) {
+    // Kept separate from the request count: these are items sitting off the
+    // shelf, which is a different kind of waiting and a more urgent one
+    todo.push({
+      href: '/admin/requests',
+      label:
+        stats.pendingCheckIns +
+        ' item' + (stats.pendingCheckIns === 1 ? '' : 's') +
+        ' handed back, waiting to be checked in',
+    });
   }
   if (can.viewProcurement && openProcurement > 0) {
     todo.push({ href: '/admin/purchase-requests', label: openProcurement + ' purchase request' + (openProcurement === 1 ? '' : 's') + ' from staff' });

@@ -1,0 +1,40 @@
+<%
+  /* Panel: the full movement list behind the dashboard's short table.
+     It answers the same filter bar, so what opens matches what you filtered. */
+%>
+<%- include('./_filters', { panel: 'issued', fields: fields, query: query }) %>
+
+<p class="panel-lede">
+  <%= total %> movement<%= total === 1 ? '' : 's' %> in <%= range.label %>.
+  <% if (truncated) { %>Showing the most recent <%= rows.length %>.<% } %>
+</p>
+
+<% if (rows.length === 0) { %>
+  <p class="panel-empty">Nothing moved in this period.</p>
+<% } else { %>
+  <ul class="panel-list">
+    <% rows.forEach(function (r) { %>
+      <li class="panel-row">
+        <%- include('../../partials/thumb', { thumbUrl: r.imageUrl, thumbName: r.productName }) %>
+        <span class="panel-row-main">
+          <b><%= r.productName %></b>
+          <span class="panel-row-sub">
+            <span class="asset-tag"><%= r.assetTag %></span> <%= r.locationName || '' %>
+          </span>
+          <span class="panel-row-sub">
+            <%= r.userName %> · <%= formatWhen(r.occupiedAt) %>
+          </span>
+        </span>
+        <span class="panel-row-actions">
+          <% if (r.returnedAt) { %>
+            <span class="badge badge-green">Returned</span>
+            <span class="panel-row-sub"><%= formatDuration(r.durationMinutes) %></span>
+          <% } else { %>
+            <span class="badge badge-amber">Still out</span>
+            <span class="panel-row-sub"><%= formatSince(r.occupiedAt) %></span>
+          <% } %>
+        </span>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>

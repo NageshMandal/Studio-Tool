@@ -27,7 +27,7 @@
         <span class="avatar"><%= (admin.name || 'A').trim().charAt(0).toUpperCase() %></span>
         <span>
           <span class="whoami-name"><%= admin.name %></span>
-          <span class="whoami-role"><%= can.isSuper ? 'Super admin' : 'Location admin' %></span>
+          <span class="whoami-role"><%= can.roleLabel %></span>
         </span>
       </div>
       <a class="btn btn-ghost btn-sm" href="/logout">Log out</a>

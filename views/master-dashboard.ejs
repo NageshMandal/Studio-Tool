@@ -1,191 +1,307 @@
+<%
+  /**
+   * The master dashboard: everything across every studio, on one screen.
+   *
+   * Almost every number here is a door. Rather than making the super admin
+   * navigate away and lose their place, clicking a card or a list opens a
+   * panel on the right with the detail behind it — see public/js/app.js.
+   * Each opener carries `data-panel` (which panel) and `data-title` (what to
+   * call it); the panel's contents are fetched, not pre-rendered, so the
+   * page stays light no matter how much is behind it.
+   */
+%>
 
-<% if (cards.length === 0) { %>
-  <div class="panel">
-    <div class="empty">
-      <h3>No studios yet</h3>
-      <p>Create your first studio, then add its location admin.</p>
-      <a class="btn btn-primary" href="/admin/studios/new"><%- icon('plus', 16) %> Add a studio</a>
-    </div>
+<section class="hello">
+  <div>
+    <h2><%= greeting %>, <%= admin.name %> 👋</h2>
+    <p class="sub">Here's your complete studio management overview</p>
   </div>
-<% } else { %>
+</section>
 
-  <section class="stat-grid">
-    <div class="stat">
-      <div class="stat-head">
-        <div>
-          <span class="stat-label">Studios</span>
-          <div class="stat-value"><%= cards.length %></div>
-        </div>
-        <span class="stat-ico" style="background: var(--blue-soft); color: var(--blue)"><%- icon('building', 18) %></span>
-      </div>
-      <p class="stat-note">Active locations</p>
-    </div>
-    <div class="stat">
-      <div class="stat-head">
-        <div>
-          <span class="stat-label">Items everywhere</span>
-          <div class="stat-value"><%= totals.items %></div>
-        </div>
-        <span class="stat-ico" style="background: var(--teal-soft); color: var(--teal)"><%- icon('box', 18) %></span>
-      </div>
-      <p class="stat-note"><%= formatMoney(totals.value) %> total value</p>
-    </div>
-    <div class="stat">
-      <div class="stat-head">
-        <div>
-          <span class="stat-label">Staff on record</span>
-          <div class="stat-value"><%= totals.staff %></div>
-        </div>
-        <span class="stat-ico" style="background: var(--purple-soft); color: var(--purple)"><%- icon('people', 18) %></span>
-      </div>
-      <p class="stat-note"><%= totals.assigned %> items currently out</p>
-    </div>
-    
-  </section>
+<%
+  /* The filter bar drives the movement lists lower down. It deliberately
+     does not touch the cards: those count how things stand right now, and
+     re-reading "36 items" as "36 items this week" would make two true
+     numbers look like they disagree. */
+%>
+<form class="panel filters filters-lead" method="GET" action="/admin/master">
+  <%- include('partials/date-range', { range: range, presets: ['today', '7d', '30d', 'month', 'all'], maxDate: maxDate }) %>
 
-  <p class="section-title">Studios at a glance</p>
-  <section class="studio-summary-grid">
-    <% cards.forEach(function (c) { %>
-      <div class="studio-summary theme-<%= c.theme %>">
-        <div class="studio-summary-head">
-          <span class="art">
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 21h18"/><path d="M5 21V6l7-4 7 4v15"/>
-              <path d="M9.5 21v-5h5v5"/><path d="M9 9h.01"/><path d="M15 9h.01"/>
-            </svg>
-          </span>
-          <div>
-            <h3><%= c.name %></h3>
-            <p class="hint" style="font-size: 11.5px"><%= c.code %> · <%= c.city || 'Studio' %></p>
-          </div>
-        </div>
+  <label class="field">
+    <span>Studio</span>
+    <select name="studio">
+      <option value="">All studios</option>
+      <% studios.forEach(function (s) { %>
+        <option value="<%= s._id %>" <%= query.studio === String(s._id) ? 'selected' : '' %>><%= s.name %></option>
+      <% }); %>
+    </select>
+  </label>
 
-        <div class="studio-summary-figures">
-          <div><span>Items</span><b><%= c.stats.totalItems %></b></div>
-          <div><span>Available</span><b><%= c.stats.availableItems %></b></div>
-          <div><span>Pending Approvals</span><b><%= c.stats.pendingTotal %></b></div>
-        </div>
+  <label class="field">
+    <span>Item / asset</span>
+    <select name="product">
+      <option value="">All items</option>
+      <% itemList.forEach(function (i) { %>
+        <option value="<%= i._id %>" <%= query.product === String(i._id) ? 'selected' : '' %>>
+          <%= i.name %> (<%= i.assetTag %>)
+        </option>
+      <% }); %>
+    </select>
+  </label>
 
-        <div class="foot">
-          <a class="btn btn-accent btn-sm btn-block" href="/admin/studios/open/<%= c._id %>">
-            Open <%- icon('arrow', 14) %>
-          </a>
-          <a class="btn btn-ghost btn-sm" href="/admin/reports?studio=<%= c._id %>">Report</a>
-        </div>
-      </div>
-    <% }); %>
-  </section>
+  <label class="field">
+    <span>Employee</span>
+    <select name="staff">
+      <option value="">All employees</option>
+      <% staffList.forEach(function (u) { %>
+        <option value="<%= u._id %>" <%= query.staff === String(u._id) ? 'selected' : '' %>><%= u.name %></option>
+      <% }); %>
+    </select>
+  </label>
 
-  <section class="panel">
-    <div class="panel-head">
+  <label class="field">
+    <span>Transaction</span>
+    <select name="type">
+      <option value="">All (issue / return)</option>
+      <option value="issue" <%= query.type === 'issue' ? 'selected' : '' %>>Still out</option>
+      <option value="return" <%= query.type === 'return' ? 'selected' : '' %>>Returned</option>
+    </select>
+  </label>
+
+  <div class="actions">
+    <button class="btn btn-primary" type="submit"><%- icon('search', 15) %> Search</button>
+    <a class="btn btn-ghost" href="/admin/master">Clear</a>
+  </div>
+</form>
+
+<%
+  /* The cards. Each one opens the list behind it, because a number on its
+     own only ever prompts the question "which ones?" */
+%>
+<section class="stat-grid stat-grid-6">
+  <button class="stat is-openable tone-blue" type="button"
+          data-panel="studios" data-title="Studios">
+    <div class="stat-head">
       <div>
-        <h2>All studio tracker</h2>
-        <p class="sub">Equipment movements across every location</p>
+        <span class="stat-label">Total studios</span>
+        <div class="stat-value"><%= totals.studioCount %></div>
       </div>
-      <a class="btn btn-ghost btn-sm" href="/admin/reports/compare">
-        <%- icon('report', 15) %> Compare studios
-      </a>
+      <span class="stat-ico" style="background: var(--blue-soft); color: var(--blue)"><%- icon('building', 18) %></span>
     </div>
+    <p class="stat-note"><%= studios.map(function (s) { return s.name; }).join(', ') || 'None yet' %></p>
+  </button>
 
-    <form class="filters" method="GET" action="/admin/master">
-      <label class="field">
-        <span>Date</span>
-        <input type="date" name="date" value="<%= query.date %>" />
-      </label>
-
-      <label class="field">
-        <span>Studio</span>
-        <select name="studio">
-          <option value="">All studios</option>
-          <% studios.forEach(function (s) { %>
-            <option value="<%= s._id %>" <%= query.studio === String(s._id) ? 'selected' : '' %>><%= s.name %></option>
-          <% }); %>
-        </select>
-      </label>
-
-      <label class="field">
-        <span>Status</span>
-        <select name="status">
-          <option value="">All status</option>
-          <option value="out" <%= query.status === 'out' ? 'selected' : '' %>>Still out</option>
-          <option value="returned" <%= query.status === 'returned' ? 'selected' : '' %>>Returned</option>
-        </select>
-      </label>
-
-      <label class="field">
-        <span>Staff</span>
-        <select name="staff">
-          <option value="">All staff</option>
-          <% staffList.forEach(function (u) { %>
-            <option value="<%= u._id %>" <%= query.staff === String(u._id) ? 'selected' : '' %>><%= u.name %></option>
-          <% }); %>
-        </select>
-      </label>
-
-      <div class="actions">
-        <button class="btn btn-primary" type="submit">Filter</button>
-        <a class="btn btn-ghost" href="/admin/master">Reset</a>
+  <button class="stat is-openable" type="button" data-panel="items" data-title="All items">
+    <div class="stat-head">
+      <div>
+        <span class="stat-label">Total items</span>
+        <div class="stat-value"><%= totals.totalItems %></div>
       </div>
-    </form>
+      <span class="stat-ico" style="background: var(--purple-soft); color: var(--purple)"><%- icon('box', 18) %></span>
+    </div>
+    <p class="stat-note">
+      <% if (totals.addedThisMonth) { %>
+        <span class="up">↑ +<%= totals.addedThisMonth %> this month</span>
+      <% } else { %>
+        Across every studio
+      <% } %>
+    </p>
+  </button>
 
-    <% if (rows.length === 0) { %>
-      <div class="empty">
-        <h3>Nothing matches</h3>
-        <p>No equipment movements were found for those filters.</p>
+  <button class="stat is-openable" type="button" data-panel="employees" data-title="Employees">
+    <div class="stat-head">
+      <div>
+        <span class="stat-label">Employees / staff</span>
+        <div class="stat-value"><%= totals.staffCount %></div>
       </div>
-    <% } else { %>
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Studio</th>
-              <th>Item</th>
-              <th>Assigned to</th>
-              <th>Duration</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% rows.forEach(function (r) { %>
+      <span class="stat-ico" style="background: var(--green-soft); color: var(--green)"><%- icon('people', 18) %></span>
+    </div>
+    <p class="stat-note">Active staff</p>
+  </button>
+
+  <button class="stat is-openable" type="button" data-panel="out" data-title="Items currently out">
+    <div class="stat-head">
+      <div>
+        <span class="stat-label">Items currently out</span>
+        <div class="stat-value"><%= totals.outNow %></div>
+      </div>
+      <span class="stat-ico" style="background: var(--amber-soft); color: var(--amber)"><%- icon('arrow', 18) %></span>
+    </div>
+    <p class="stat-note"><%= totals.outPct %>% of the register</p>
+  </button>
+
+  <button class="stat is-openable" type="button" data-panel="pending" data-title="Pending requests">
+    <div class="stat-head">
+      <div>
+        <span class="stat-label">Pending requests</span>
+        <div class="stat-value"><%= totals.pendingTotal %></div>
+      </div>
+      <span class="stat-ico" style="background: var(--teal-soft); color: var(--teal)"><%- icon('inbox', 18) %></span>
+    </div>
+    <p class="stat-note">Awaiting approval</p>
+  </button>
+
+  <button class="stat is-openable" type="button" data-panel="value" data-title="Asset value">
+    <div class="stat-head">
+      <div>
+        <span class="stat-label">Total asset value</span>
+        <div class="stat-value"><%= formatMoney(totals.totalValue) %></div>
+      </div>
+      <span class="stat-ico" style="background: var(--blue-soft); color: var(--blue)"><%- icon('report', 18) %></span>
+    </div>
+    <p class="stat-note">Estimated value</p>
+  </button>
+</section>
+
+<div class="master-grid">
+  <div class="master-main">
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2><%- icon('box', 17) %> Recent issued items</h2>
+          <p class="sub">Latest items issued to employees · <%= range.label %></p>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="button"
+                data-panel="issued" data-title="Issued items"
+                data-params="<%= 'from=' + (range.from || '') + '&to=' + (range.to || '') + '&studio=' + query.studio + '&staff=' + query.staff + '&product=' + query.product + '&type=' + query.type %>">
+          View all
+        </button>
+      </div>
+
+      <% if (issued.length === 0) { %>
+        <div class="empty">
+          <h3>Nothing in <%= range.label %></h3>
+          <p>No equipment movements matched those filters.</p>
+        </div>
+      <% } else { %>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
               <tr>
-                <td><%= formatWhen(r.occupiedAt) %></td>
-                <td><span class="badge badge-grey"><%= r.locationName || '—' %></span></td>
-                <td>
-                  <span class="row-title"><%= r.productName %></span>
-                  <span class="row-sub"><%= r.assetTag %></span>
-                </td>
-                <td>
-                  <span class="person">
-                    <span class="avatar"><%= (r.userName || '?').trim().charAt(0).toUpperCase() %></span>
-                    <%= r.userName %>
-                  </span>
-                </td>
-                <td><%= r.durationMinutes != null ? formatDuration(r.durationMinutes) : formatSince(r.occupiedAt) %></td>
-                <td>
-                  <% if (r.returnedAt) { %>
-                    <span class="badge badge-green">Completed</span>
-                  <% } else { %>
-                    <span class="badge badge-amber">In progress</span>
-                  <% } %>
-                </td>
+                <th>#</th><th>Date &amp; time</th><th>Employee</th><th>Studio</th>
+                <th>Item (asset)</th><th>Issued via</th><th>Duration</th><th>Status</th>
               </tr>
-            <% }); %>
-          </tbody>
-        </table>
-      </div>
-      <div class="panel-foot">
-        <p class="hint">
-          Showing the <%= rows.length %> most recent movements.
-          <% if (rows.length === 60) { %>Narrow the filters to see further back.<% } %>
-        </p>
-      </div>
-    <% } %>
-  </section>
+            </thead>
+            <tbody>
+              <% issued.forEach(function (r, n) { %>
+                <tr class="is-clickable" data-panel="item" data-params="id=<%= r.product %>" data-title="<%= r.productName %>">
+                  <td><%= n + 1 %></td>
+                  <td><%= formatWhen(r.occupiedAt) %></td>
+                  <td><%= r.userName %></td>
+                  <td><%= r.locationName || '—' %></td>
+                  <td>
+                    <span class="row-title"><%= r.productName %></span>
+                    <span class="row-sub"><%= r.assetTag %></span>
+                  </td>
+                  <td><span class="badge badge-grey"><%= r.source || 'admin' %></span></td>
+                  <td><%= r.durationMinutes != null ? formatDuration(r.durationMinutes) : formatSince(r.occupiedAt) %></td>
+                  <td>
+                    <% if (r.returnedAt) { %>
+                      <span class="badge badge-green">Returned</span>
+                    <% } else { %>
+                      <span class="badge badge-blue">In progress</span>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel-foot">
+          <p class="hint"><%= issuedTotal %> movement<%= issuedTotal === 1 ? '' : 's' %> in <%= range.label %>.</p>
+        </div>
+      <% } %>
+    </section>
 
-  <div class="alert alert-info">
-    <b>Note.</b> Purchase requests raised by staff are handled by each studio's own
-    admin and are not shown here — they are private to the studio that raised them.
+    <section class="panel">
+      <div class="panel-head">
+        <h2><%- icon('clock', 17) %> Recent activity</h2>
+        <button class="btn btn-ghost btn-sm" type="button" data-panel="activity" data-title="Activity">View all</button>
+      </div>
+      <div class="panel-body">
+        <% if (activity.length === 0) { %>
+          <p class="panel-empty">Nothing has happened yet.</p>
+        <% } else { %>
+          <ul class="activity-list">
+            <% activity.forEach(function (e) { %>
+              <li>
+                <span class="dot dot-<%= e.tone %>"></span>
+                <span class="activity-text">
+                  <b><%= e.who %></b> <%= e.verb %> <b><%= e.what %></b><%= e.where ? ' at ' + e.where : '' %>
+                </span>
+                <span class="activity-when"><%= formatSince(e.at) %> ago</span>
+              </li>
+            <% }); %>
+          </ul>
+        <% } %>
+      </div>
+    </section>
   </div>
-<% } %>
+
+  <aside class="master-side">
+    <section class="panel">
+      <div class="panel-head">
+        <h2><%- icon('building', 17) %> Top studios</h2>
+        <button class="btn btn-ghost btn-sm" type="button" data-panel="studios" data-title="Studios">View all</button>
+      </div>
+      <ul class="mini-list">
+        <% studioRanking.slice(0, 5).forEach(function (s) { %>
+          <li class="theme-<%= s.theme %>" data-panel="items"
+              data-params="studio=<%= s._id %>" data-title="Items at <%= s.name %>">
+            <span class="mini-mark"><%- icon('building', 15) %></span>
+            <span class="mini-name"><%= s.name %></span>
+            <span class="mini-value"><b><%= s.itemCount %></b> items</span>
+            <span class="mini-go"><%- icon('arrow', 14) %></span>
+          </li>
+        <% }); %>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2><%- icon('box', 17) %> Item categories</h2>
+        <button class="btn btn-ghost btn-sm" type="button" data-panel="categories" data-title="Categories">View all</button>
+      </div>
+      <ul class="mini-list">
+        <% categories.slice(0, 6).forEach(function (c) { %>
+          <li data-panel="items"
+              data-params="category=<%= encodeURIComponent(c.category) %>"
+              data-title="<%= c.category %> items">
+            <span class="mini-mark"><%- icon('box', 15) %></span>
+            <span class="mini-name"><%= c.category %></span>
+            <span class="mini-value"><b><%= c.total %></b> <span class="hint"><%= c.pct %>%</span></span>
+            <span class="mini-go"><%- icon('arrow', 14) %></span>
+          </li>
+        <% }); %>
+        <% if (categories.length === 0) { %>
+          <li><span class="mini-name hint">No items yet</span></li>
+        <% } %>
+      </ul>
+    </section>
+  </aside>
+</div>
+
+<div class="alert alert-info">
+  <b>Note.</b> Purchase requests raised by staff are handled by each studio's own
+  admin and are not shown here — they are private to the studio that raised them.
+</div>
+
+<%
+  /* The panel itself. One element, reused: its contents are fetched each
+     time it opens, so nothing here is rendered until it is actually asked
+     for, and there is no second copy of the data sitting in the page. */
+%>
+<div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-labelledby="drawerTitle">
+  <header class="drawer-head">
+    <div>
+      <h2 id="drawerTitle">Details</h2>
+      <button class="drawer-back" type="button" id="drawerBack" hidden>‹ Back</button>
+    </div>
+    <button class="drawer-close" type="button" id="drawerClose" aria-label="Close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </header>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>

@@ -17,7 +17,9 @@ const { CATEGORIES } = require('../models/Product');
  */
 
 const CONDITIONS = ['new', 'good', 'needs-repair', 'retired'];
-const STATUSES = ['available', 'assigned', 'maintenance'];
+// 'pending-return' is set by the system, never chosen on the form, but it
+// still has to be filterable — an admin needs to find what is waiting on them
+const STATUSES = ['available', 'assigned', 'maintenance', 'pending-return'];
 
 const cleanBody = (body) => ({
   name: body.name,
@@ -218,7 +220,13 @@ exports.remove = async (req, res, next) => {
     if (!req.scope.owns(product)) return res.redirect(backTo('That item belongs to another studio'));
 
     if (product.assignedTo) {
-      await releaseProduct({ product, source: 'admin', note: 'Item removed from the register' });
+      await releaseProduct({
+        product,
+        source: 'admin',
+        note: 'Item removed from the register',
+        acceptedBy: req.admin.email || req.admin.name,
+        acceptRemark: 'Checked in automatically: the item was removed from the register',
+      });
     }
 
     // Any open requests for it can no longer be honoured
@@ -238,6 +246,10 @@ exports.remove = async (req, res, next) => {
   }
 };
 
+// A wide range on a busy studio returns a lot of rows; the page is for
+// reading, so it caps what it draws and says when it has
+const TRACKER_ROW_LIMIT = 500;
+
 /**
  * GET /admin/tracker — the "Studio Tracker" table from the design:
  * today's movements at this studio, in one place, with the status of each.
@@ -245,32 +257,44 @@ exports.remove = async (req, res, next) => {
 exports.tracker = async (req, res, next) => {
   try {
     const UsageLog = require('../models/UsageLog');
-    const { dayRange, todayKey } = require('../utils/format');
+    const { resolveRange, shiftRange, rangeQuery, todayKey } = require('../utils/format');
 
-    const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : todayKey();
-    const { start, end } = dayRange(dateKey);
+    const range = resolveRange(req.query, 'today');
     const { staff, status } = req.query;
 
-    const filter = req.scope.filter({
-      occupiedAt: { $lt: end },
-      $or: [{ returnedAt: null }, { returnedAt: { $gte: start } }],
-    });
+    // Open at any point during the window, so a loan that spans the period
+    // is counted rather than falling between two days
+    const filter = req.scope.filter();
+    if (range.end) filter.occupiedAt = { $lt: range.end };
+    if (range.start) {
+      filter.$or = [{ returnedAt: null }, { returnedAt: { $gte: range.start } }];
+    }
+
     if (staff) filter.user = staff;
     if (status === 'out') filter.returnedAt = null;
     if (status === 'returned') filter.returnedAt = { $ne: null };
 
-    const [rows, staffList] = await Promise.all([
-      UsageLog.find(filter).sort({ occupiedAt: -1 }).lean(),
+    const [rows, totalCount, staffList] = await Promise.all([
+      UsageLog.find(filter).sort({ occupiedAt: -1 }).limit(TRACKER_ROW_LIMIT).lean(),
+      UsageLog.countDocuments(filter),
       User.find(req.scope.filter({ status: 'active' }), 'name').sort({ name: 1 }).lean(),
     ]);
+
+    const prev = shiftRange(range, -1);
+    const next = shiftRange(range, 1);
 
     res.render('tracker', {
       title: 'Studio tracker',
       active: 'tracker',
       rows,
       staffList,
-      date: dateKey,
-      today: todayKey(),
+      range,
+      prevUrl: prev ? `/admin/tracker${rangeQuery(req.query, prev)}` : null,
+      nextUrl: next ? `/admin/tracker${rangeQuery(req.query, next)}` : null,
+      maxDate: todayKey(),
+      truncated: totalCount > rows.length,
+      totalCount,
+      rowLimit: TRACKER_ROW_LIMIT,
       query: { staff: staff || '', status: status || '' },
       message: req.query.message || null,
     });

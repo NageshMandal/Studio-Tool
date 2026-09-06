@@ -64,8 +64,8 @@ individual queries.
 | Role | Scope | Can do | Cannot do |
 |---|---|---|---|
 | **Super admin** | All studios | Create studios, appoint one location admin each, open any studio dashboard, master dashboard, cross-studio reports | **See purchase requests** |
-| **Location admin** | One studio | Everything at their studio: items, staff, approvals, reports. Decides purchase requests. Creates managers | Touch another studio |
-| **Location manager** | One studio | Same as above, minus admin accounts, deleting, and approving purchases | Manage admins, delete, approve purchases |
+| **Location admin** | One studio | Everything at their studio: items, staff, approvals, reports. Decides purchase requests. Creates sub admins | Touch another studio |
+| **Location sub admin** | One studio | Same as above, minus admin accounts, deleting, and approving purchases | Manage admins, delete, approve purchases |
 | **Staff** | One studio | Take out / request / book equipment, raise purchase requests | See other studios |
 
 The super admin lives only in `.env`. It has no database row, so it cannot be
@@ -133,7 +133,7 @@ you like:
 3. **Admin accounts → Add admin** → create one *location admin* per studio.
 4. That admin signs in and lands straight on their own dashboard — no studio
    switcher, because there is nothing for them to switch to.
-5. They add their studio's items and staff, and create *location managers* if
+5. They add their studio's items and staff, and create *location sub admins* if
    they want help.
 
 ---

@@ -8,7 +8,7 @@ const studios=[studio];
 const roles={
  super:{id:'root',name:'Studio Admin',email:'a@o.com',adminRole:'super',isRoot:true,location:null},
  location_admin:{id:'a1',name:'Priya',email:'p@o.com',adminRole:'location_admin',location:'s1'},
- location_manager:{id:'a2',name:'Sujit',email:'s@o.com',adminRole:'location_manager',location:'s1'}};
+ location_sub_admin:{id:'a2',name:'Sujit',email:'s@o.com',adminRole:'location_sub_admin',location:'s1'}};
 let fail=0;
 const go=(v,l,label)=>new Promise(r=>ejs.renderFile(path.join(VIEWS,v+'.ejs'),l,{views:[VIEWS]},(e)=>{
  if(e){fail++;console.log('FAIL '+label+'\n     '+String(e.message).split('\n').filter(Boolean).pop().trim());}

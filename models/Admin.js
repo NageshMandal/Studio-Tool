@@ -17,22 +17,30 @@ const bcrypt = require('bcryptjs');
  *                  studio's items, people, requests and reports — and is
  *                  the one who handles staff item requests (procurement),
  *                  which the super admin deliberately never sees. May
- *                  create location managers beneath them.
+ *                  create location sub admins beneath them.
  *
- *  location_manager  A second-line admin for the same studio. Everything a
+ *  location_sub_admin  A second-line admin for the same studio. Everything a
  *                  location admin can do EXCEPT managing admin accounts,
  *                  deleting items or deleting people. Not a primary admin.
  *
  * A super admin's `location` is always null. The other two always carry one.
  */
 
-const ROLES = ['super', 'location_admin', 'location_manager'];
+const ROLES = ['super', 'location_admin', 'location_sub_admin'];
 
 const ROLE_LABELS = {
   super: 'Super admin',
   location_admin: 'Location admin',
-  location_manager: 'Location manager',
+  location_sub_admin: 'Location sub admin',
 };
+
+/**
+ * The old key for the third tier, before it was renamed to "location sub
+ * admin". Accounts created under the old name are migrated on boot (see
+ * `migrateRoles` below); this constant is what does the finding, and is the
+ * only place the retired name still appears.
+ */
+const LEGACY_SUB_ADMIN_ROLE = 'location_manager';
 
 const adminSchema = new mongoose.Schema(
   {
@@ -59,7 +67,7 @@ const adminSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: ROLES,
-      default: 'location_manager',
+      default: 'location_sub_admin',
       required: true,
     },
 
@@ -120,7 +128,31 @@ adminSchema.methods.matchPassword = function (entered) {
 
 adminSchema.statics.ROLES = ROLES;
 adminSchema.statics.ROLE_LABELS = ROLE_LABELS;
+adminSchema.statics.LEGACY_SUB_ADMIN_ROLE = LEGACY_SUB_ADMIN_ROLE;
+
+/**
+ * Moves any account still on the old `location_manager` key onto
+ * `location_sub_admin`. Runs once at boot, and is a no-op every time after.
+ *
+ * This is not optional tidying. The capability map matches on the role
+ * string, so an account left on the retired key would fall through every
+ * branch and quietly lose its access — the person could still sign in, but
+ * purchase requests and everything else would simply not be there, with no
+ * error to explain it. Renaming the key without this would lock people out.
+ *
+ * `strict: false` is needed because the value being searched for is no
+ * longer in the schema's enum.
+ */
+adminSchema.statics.migrateRoles = async function migrateRoles() {
+  const result = await this.updateMany(
+    { role: LEGACY_SUB_ADMIN_ROLE },
+    { $set: { role: 'location_sub_admin' } },
+    { strict: false }
+  );
+  return result.modifiedCount || 0;
+};
 
 module.exports = mongoose.model('Admin', adminSchema);
 module.exports.ROLES = ROLES;
 module.exports.ROLE_LABELS = ROLE_LABELS;
+module.exports.LEGACY_SUB_ADMIN_ROLE = LEGACY_SUB_ADMIN_ROLE;

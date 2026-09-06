@@ -1,0 +1,29 @@
+<%- include('./_filters', { panel: 'value', fields: fields, query: query }) %>
+
+<p class="panel-lede">
+  <%= formatMoney(totalValue) %> across the register, most valuable first.
+</p>
+
+<% if (items.length === 0) { %>
+  <p class="panel-empty">No item has a price recorded yet.</p>
+<% } else { %>
+  <ul class="panel-list">
+    <% items.forEach(function (i) { %>
+      <li class="panel-row">
+        <%- include('../../partials/thumb', { thumbUrl: i.imageUrl, thumbName: i.name }) %>
+        <span class="panel-row-main">
+          <b><%= i.name %></b>
+          <span class="panel-row-sub">
+            <span class="asset-tag"><%= i.assetTag %></span> <%= i.studioName %>
+          </span>
+        </span>
+        <span class="panel-row-actions">
+          <b><%= formatMoney(i.price) %></b>
+          <button class="btn btn-ghost btn-sm" type="button"
+                  data-panel="item" data-params="id=<%= i._id %>"
+                  data-title="<%= i.name %>">View</button>
+        </span>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>

@@ -1,0 +1,25 @@
+<%
+  /* Panel: every studio. Selecting one opens its dashboard, which is the
+     whole point of listing them here rather than only counting them. */
+%>
+<%- include('./_filters', { panel: 'studios', fields: fields, query: query }) %>
+
+<p class="panel-lede">Pick a studio to work in it, or open the whole register.</p>
+
+<ul class="panel-list">
+  <% studios.forEach(function (s) { %>
+    <li class="panel-row theme-<%= s.theme %>">
+      <span class="panel-row-mark"><%- icon('building', 17) %></span>
+      <span class="panel-row-main">
+        <b><%= s.name %></b>
+        <span class="panel-row-sub"><%= s.code %> · <%= s.city || 'Studio' %> · <%= s.itemCount %> items</span>
+      </span>
+      <span class="panel-row-actions">
+        <a class="btn btn-accent btn-sm" href="/admin/studios/open/<%= s._id %>">Open</a>
+        <button class="btn btn-ghost btn-sm" type="button"
+                data-panel="items" data-params="studio=<%= s._id %>"
+                data-title="Items at <%= s.name %>">Items</button>
+      </span>
+    </li>
+  <% }); %>
+</ul>

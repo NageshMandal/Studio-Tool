@@ -8,7 +8,7 @@ const { mayManage, assignableRoles } = require('./controllers/adminAccountContro
 
 const SUPER = { id: 'root', adminRole: 'super', location: null };
 const PAT_ADMIN = { id: 'a1', adminRole: 'location_admin', location: 'PAT' };
-const PAT_MGR = { id: 'a2', adminRole: 'location_manager', location: 'PAT' };
+const PAT_SUB = { id: 'a2', adminRole: 'location_sub_admin', location: 'PAT' };
 const RAN_ADMIN = { id: 'a3', adminRole: 'location_admin', location: 'RAN' };
 
 let fails = 0;
@@ -23,34 +23,53 @@ check('super cannot view purchase requests', capabilities(SUPER).viewProcurement
 check('super cannot decide purchase requests', capabilities(SUPER).decideProcurement, false);
 check('location admin can view', capabilities(PAT_ADMIN).viewProcurement, true);
 check('location admin can decide', capabilities(PAT_ADMIN).decideProcurement, true);
-check('manager can view', capabilities(PAT_MGR).viewProcurement, true);
-check('manager cannot decide', capabilities(PAT_MGR).decideProcurement, false);
+check('sub admin can view', capabilities(PAT_SUB).viewProcurement, true);
+check('sub admin cannot decide', capabilities(PAT_SUB).decideProcurement, false);
+
+console.log('\n--- The role is named consistently ---');
+const Admin = require('./models/Admin');
+check('the third tier is a sub admin', capabilities(PAT_SUB).isSubAdmin, true);
+check('and reads that way to a person', capabilities(PAT_SUB).roleLabel, 'Location sub admin');
+check('super reads correctly too', capabilities(SUPER).roleLabel, 'Super admin');
+check('location admin reads correctly too', capabilities(PAT_ADMIN).roleLabel, 'Location admin');
+check('the retired key is gone from the schema', Admin.ROLES.includes('location_manager'), false);
+check('every role has a label', Admin.ROLES.every((r) => Boolean(Admin.ROLE_LABELS[r])), true);
+
+/**
+ * The one that actually matters: an account left on the old key must not
+ * quietly keep working with no permissions. It has to be migrated, so the
+ * capability map is asserted to give it nothing — which is what makes the
+ * boot migration load-bearing rather than housekeeping.
+ */
+const STRANDED = { id: 'a4', adminRole: Admin.LEGACY_SUB_ADMIN_ROLE, location: 'PAT' };
+check('an unmigrated account has no procurement access', capabilities(STRANDED).viewProcurement, false);
+check('so the boot migration is required, not cosmetic', capabilities(STRANDED).isSubAdmin, false);
 
 console.log('\n--- Cross-studio reach ---');
 check('only super sees all studios', capabilities(SUPER).viewAllStudios, true);
 check('location admin does not', capabilities(PAT_ADMIN).viewAllStudios, false);
-check('manager does not', capabilities(PAT_MGR).viewAllStudios, false);
+check('sub admin does not', capabilities(PAT_SUB).viewAllStudios, false);
 check('only super manages studios', capabilities(PAT_ADMIN).manageStudios, false);
 
 console.log('\n--- Who may create whom ---');
-check('super assigns every role', assignableRoles(SUPER), ['super', 'location_admin', 'location_manager']);
-check('location admin assigns managers only', assignableRoles(PAT_ADMIN), ['location_manager']);
-check('manager assigns nobody', assignableRoles(PAT_MGR), []);
+check('super assigns every role', assignableRoles(SUPER), ['super', 'location_admin', 'location_sub_admin']);
+check('location admin assigns sub admins only', assignableRoles(PAT_ADMIN), ['location_sub_admin']);
+check('sub admin assigns nobody', assignableRoles(PAT_SUB), []);
 
 console.log('\n--- Who may act on whom ---');
 check('super may manage a location admin', mayManage(SUPER, { _id: 'a1', role: 'location_admin', location: 'PAT' }), true);
 check('nobody may manage themselves', mayManage(SUPER, { _id: 'root', role: 'super', location: null }), false);
-check('PAT admin may manage a PAT manager', mayManage(PAT_ADMIN, { _id: 'a2', role: 'location_manager', location: 'PAT' }), true);
-check('PAT admin may NOT manage a RAN manager', mayManage(PAT_ADMIN, { _id: 'a9', role: 'location_manager', location: 'RAN' }), false);
+check('PAT admin may manage a PAT sub admin', mayManage(PAT_ADMIN, { _id: 'a2', role: 'location_sub_admin', location: 'PAT' }), true);
+check('PAT admin may NOT manage a RAN sub admin', mayManage(PAT_ADMIN, { _id: 'a9', role: 'location_sub_admin', location: 'RAN' }), false);
 check('PAT admin may NOT manage another location admin', mayManage(PAT_ADMIN, { _id: 'a3', role: 'location_admin', location: 'PAT' }), false);
 check('PAT admin may NOT manage a super admin', mayManage(PAT_ADMIN, { _id: 'a0', role: 'super', location: null }), false);
-check('manager may manage nobody', mayManage(PAT_MGR, { _id: 'a2', role: 'location_manager', location: 'PAT' }), false);
+check('sub admin may manage nobody', mayManage(PAT_SUB, { _id: 'a2', role: 'location_sub_admin', location: 'PAT' }), false);
 
 console.log('\n--- Deleting is a primary-admin action ---');
 check('location admin may delete items', capabilities(PAT_ADMIN).deleteItems, true);
-check('manager may not delete items', capabilities(PAT_MGR).deleteItems, false);
-check('manager may not delete people', capabilities(PAT_MGR).deletePeople, false);
-check('manager may still add and edit items', capabilities(PAT_MGR).manageItems, true);
+check('sub admin may not delete items', capabilities(PAT_SUB).deleteItems, false);
+check('sub admin may not delete people', capabilities(PAT_SUB).deletePeople, false);
+check('sub admin may still add and edit items', capabilities(PAT_SUB).manageItems, true);
 
 console.log('\n--- Scope filters ---');
 const { withScope } = require('./middleware/scope');

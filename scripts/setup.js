@@ -123,7 +123,7 @@ async function migrateAdmins(defaultStudio) {
       role: 'location_admin',
       _id: { $ne: admin._id },
     });
-    admin.role = hasPrimary ? 'location_manager' : 'location_admin';
+    admin.role = hasPrimary ? 'location_sub_admin' : 'location_admin';
     admin.location = defaultStudio._id;
     await admin.save({ validateBeforeSave: false });
     log(`${admin.email} → ${admin.role} at ${defaultStudio.name}`);

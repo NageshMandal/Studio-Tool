@@ -109,7 +109,16 @@
               </div>
             <% }); %>
 
-            <form method="POST" action="/staff/return/<%= p._id %>">
+            <form method="POST" action="/staff/return/<%= p._id %>" class="submit-form">
+              <label class="field">
+                <span>How is it coming back?</span>
+                <input type="text" name="remark" maxlength="300" required
+                       placeholder="Type NA if nothing happened" />
+                <span class="help">
+                  Say if anything happened to it. Your admin adds their own note
+                  when they check it in, so both accounts are kept.
+                </span>
+              </label>
               <button class="btn btn-primary btn-block btn-sm" type="submit">Submit item</button>
             </form>
           </div>

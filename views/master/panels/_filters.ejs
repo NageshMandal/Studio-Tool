@@ -1,0 +1,46 @@
+<%
+  /**
+   * The filter bar at the top of a side panel.
+   *
+   * Driven by a `fields` list rather than written out per panel, so the
+   * markup, the debounce and the Clear button behave identically everywhere
+   * and a new panel only has to describe what it can be filtered by.
+   *
+   * It is a real <form>: submitting it works even if the script that
+   * intercepts it never loads, because the panel URL it posts to is the same
+   * one the drawer fetches.
+   *
+   * Locals: panel (name), fields (array), query (what is currently applied).
+   */
+  var applied = fields.filter(function (f) { return query[f.name]; }).length;
+%>
+
+<form class="panel-filters" data-panel-filter method="GET" action="/admin/master/panel/<%= panel %>">
+  <% fields.forEach(function (f) { %>
+    <% if (f.type === 'select') { %>
+      <label class="field">
+        <span><%= f.label %></span>
+        <select name="<%= f.name %>">
+          <% f.options.forEach(function (o) { %>
+            <option value="<%= o.value %>" <%= String(query[f.name] || '') === String(o.value) ? 'selected' : '' %>>
+              <%= o.label %>
+            </option>
+          <% }); %>
+        </select>
+      </label>
+    <% } else { %>
+      <label class="field panel-filters-search">
+        <span><%= f.label %></span>
+        <input type="search" name="<%= f.name %>" value="<%= query[f.name] || '' %>"
+               placeholder="<%= f.placeholder || '' %>" autocomplete="off" />
+      </label>
+    <% } %>
+  <% }); %>
+
+  <div class="panel-filters-actions">
+    <button class="btn btn-primary btn-sm" type="submit">Apply</button>
+    <% if (applied) { %>
+      <button class="btn btn-ghost btn-sm" type="button" data-panel-clear>Clear</button>
+    <% } %>
+  </div>
+</form>

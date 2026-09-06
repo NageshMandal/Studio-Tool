@@ -55,6 +55,10 @@
 
 * { box-sizing: border-box; }
 
+/* `hidden` has to beat component rules like `.studio-card { display: flex }`,
+   otherwise a card the search filtered out would still be on screen. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--canvas);
@@ -385,7 +389,7 @@ p { margin: 0; }
 }
 .role-super   { background: #1e293b; color: #fff; }
 .role-admin   { background: var(--blue-soft); color: var(--blue); }
-.role-manager { background: var(--teal-soft); color: var(--teal); }
+.role-sub-admin { background: var(--teal-soft); color: var(--teal); }
 .role-sales   { background: var(--purple-soft); color: var(--purple); }
 
 /* ---------------- buttons ---------------- */
@@ -473,6 +477,48 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .filters .field > span { font-size: 11.5px; }
 .filters input, .filters select { padding: 8px 11px; font-size: 13.5px; }
 .filters .actions { display: flex; gap: 8px; }
+
+/* ---------------- date range filter ---------------- */
+
+/* Shared by the tracker, the usage log and the master dashboard. It sits
+   inside a .filters bar, so it takes the whole first row and lets the other
+   fields wrap underneath rather than being squeezed beside it. */
+.range-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  flex-basis: 100%;
+}
+
+.range-presets { display: flex; flex-wrap: wrap; gap: 6px; align-self: flex-end; padding-bottom: 1px; }
+.range-chip {
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.range-chip:hover { color: var(--text); border-color: var(--faint); }
+.range-chip.is-on {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+
+.range-dates { display: flex; gap: 10px; flex: 1; min-width: 260px; }
+.range-dates .field { margin: 0; flex: 1; min-width: 120px; }
+.range-dates .field > span { font-size: 11.5px; }
+
+@media (max-width: 640px) {
+  .range-dates { flex-basis: 100%; }
+}
 
 /* ---------------- alerts ---------------- */
 
@@ -616,6 +662,156 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 }
 .studio-card .facts b { display: block; font-size: 17px; color: var(--text); font-weight: 700; }
 .studio-card .btn { margin-top: auto; }
+.studio-card .sub .asset-tag { margin-right: 6px; }
+
+.studio-card { position: relative; }
+.studio-card.is-current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow-sm); }
+.studio-card-flag {
+  position: absolute;
+  top: 12px; right: 12px;
+  background: var(--accent, var(--blue));
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+/* Per-card management, so editing a studio never means leaving the page */
+.studio-card-tools {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.studio-card-tools > *, .studio-card-tools form { flex: 1; }
+.studio-card-tools .btn { margin-top: 0; width: 100%; }
+.btn-quiet { color: var(--muted); }
+.btn-quiet:hover { color: var(--red); border-color: #f6cccc; background: var(--red-soft); }
+
+/* The "add" tile sits in the grid as one more studio, so creating one is
+   where you already are rather than behind a button somewhere else. */
+.studio-card-add {
+  background: none;
+  border: 1.5px dashed var(--line);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 260px;
+  box-shadow: none;
+}
+.studio-card-add:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-soft); }
+.studio-card-add .plus {
+  display: grid;
+  place-items: center;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  margin-bottom: 4px;
+}
+.studio-card-add .label { font-weight: 600; font-size: 15px; color: inherit; }
+.studio-card-add .hint { max-width: 210px; text-align: center; }
+
+/* Toolbar above the grid */
+.hub-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.hub-bar-left { display: flex; align-items: center; gap: 10px; }
+.hub-bar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hub-count { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+
+.hub-search { position: relative; display: flex; align-items: center; }
+.hub-search .ico { position: absolute; left: 10px; color: var(--faint); pointer-events: none; }
+.hub-search input { width: 200px; padding: 7px 12px 7px 32px; font-size: 13px; }
+
+.hub-empty-search { text-align: center; color: var(--muted); font-size: 13.5px; padding: 26px 0; }
+
+.hub-archived { margin-top: 26px; }
+.hub-archived summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  list-style: none;
+}
+.hub-archived summary::-webkit-details-marker { display: none; }
+.hub-archived summary:hover { color: var(--text); }
+.hub-archived[open] summary { border-radius: var(--r-sm) var(--r-sm) 0 0; }
+
+/* ---------------- modal ---------------- */
+
+/* Used by the studio add/edit dialog. It renders closed and JS opens it, but
+   it also ships open when a rejected save comes back — so the form still
+   works, values and all, with no JavaScript at all. */
+.modal-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 37, 87, 0.34);
+  padding: 24px;
+  overflow-y: auto;
+}
+.modal-backdrop.is-open { display: grid; place-items: start center; }
+body.modal-open { overflow: hidden; }
+
+.modal {
+  width: 100%;
+  max-width: 640px;
+  margin: auto;
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  animation: modal-in 0.16s ease-out;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .modal { animation: none; } }
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.modal-head h2 { font-size: 16px; }
+.modal-head .sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--faint);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.modal-close:hover { color: var(--text); background: var(--line-soft); }
+.modal-body { padding: 18px 20px 20px; }
 
 /* Master dashboard: compact per-studio summary cards */
 .studio-summary-grid {
@@ -809,3 +1005,264 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   body { background: #fff; }
   .panel { box-shadow: none; break-inside: avoid; }
 }
+
+/* ==========================================================================
+   Master dashboard and its side panel
+   ========================================================================== */
+
+.hello { margin-bottom: 18px; }
+.hello h2 { font-size: 22px; }
+.hello .sub { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+
+/* The filter bar sits on its own card above the cards, rather than buried
+   in the first panel, because it governs more than one section below. */
+.filters-lead { border-radius: var(--r); border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+
+.stat-grid-6 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+
+/* A card that opens a panel. It is a real <button>, so it is reachable by
+   keyboard and announced as something you can press — a div with a click
+   handler would be neither. */
+.stat.is-openable {
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  transition: transform 0.14s, box-shadow 0.14s, border-color 0.14s;
+}
+.stat.is-openable:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: var(--faint); }
+.stat .up { color: var(--green); font-weight: 600; }
+
+.master-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+.master-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.master-side { display: flex; flex-direction: column; gap: 18px; }
+
+.panel-head h2 { display: flex; align-items: center; gap: 8px; }
+
+/* Rows that open a panel */
+tr.is-clickable, li.is-clickable { cursor: pointer; }
+tr.is-clickable:hover { background: #f7f9fd; }
+
+/* Compact ranked lists in the right-hand column */
+.mini-list { list-style: none; margin: 0; padding: 6px; }
+.mini-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.mini-list li:hover { background: #f5f7fb; }
+.mini-mark {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent-soft, var(--blue-soft));
+  color: var(--accent, var(--blue));
+  flex-shrink: 0;
+}
+.mini-name { flex: 1; font-weight: 600; font-size: 13.5px; }
+.mini-value { font-size: 12.5px; color: var(--muted); }
+.mini-value b { color: var(--text); font-size: 14px; }
+.mini-go { color: var(--faint); display: grid; place-items: center; }
+
+/* Activity feed */
+.activity-list { list-style: none; margin: 0; padding: 0; }
+.activity-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 13.5px;
+}
+.activity-list li:last-child { border-bottom: none; }
+.activity-list .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; background: var(--faint); }
+.dot-blue { background: var(--blue); }
+.dot-green { background: var(--green); }
+.dot-amber { background: var(--amber); }
+.dot-grey { background: var(--faint); }
+.activity-text { flex: 1; }
+.activity-when { color: var(--faint); font-size: 12px; white-space: nowrap; }
+
+/* ---------------- the side panel ---------------- */
+
+.drawer-backdrop { position: fixed; inset: 0; background: rgba(15, 37, 87, 0.28); z-index: 70; }
+
+.drawer {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(560px, 100vw);
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  z-index: 71;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.2s ease-out;
+  visibility: hidden;
+}
+.drawer.is-open { transform: none; visibility: visible; }
+@media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
+
+body.drawer-open { overflow: hidden; }
+
+.drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
+}
+.drawer-head h2 { font-size: 16px; }
+.drawer-back {
+  background: none; border: none; padding: 2px 0 0;
+  color: var(--blue); font-family: inherit; font-size: 12.5px;
+  font-weight: 600; cursor: pointer;
+}
+.drawer-close {
+  background: none; border: none; color: var(--faint);
+  cursor: pointer; padding: 4px; border-radius: var(--r-sm);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.drawer-close:hover { color: var(--text); background: var(--line-soft); }
+
+.drawer-body { padding: 16px 20px 24px; overflow-y: auto; flex: 1; }
+
+.panel-lede { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+.panel-section {
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em;
+  font-weight: 700; color: var(--faint); margin: 18px 0 8px;
+}
+.panel-empty, .panel-loading, .panel-error { color: var(--muted); font-size: 13.5px; padding: 18px 0; }
+.panel-error { color: var(--red); }
+
+.panel-list { list-style: none; margin: 0; padding: 0; }
+.panel-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.panel-row:last-child { border-bottom: none; }
+.panel-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.panel-row-main b { font-size: 13.5px; }
+.panel-row-sub { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.panel-row-actions {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: 6px; flex-shrink: 0;
+}
+.panel-decide { flex-direction: row; }
+.panel-row-mark {
+  width: 34px; height: 34px; border-radius: 9px;
+  display: grid; place-items: center;
+  background: var(--accent-soft, var(--blue-soft));
+  color: var(--accent, var(--blue));
+  flex-shrink: 0;
+}
+
+.panel-hero { display: flex; gap: 14px; align-items: center; margin-bottom: 18px; }
+.panel-hero h3 { font-size: 17px; margin-bottom: 3px; }
+.panel-hero .thumb { width: 76px; height: 76px; border-radius: var(--r); flex-shrink: 0; }
+.avatar-lg { width: 56px; height: 56px; font-size: 20px; }
+
+@media (max-width: 1080px) {
+  .master-grid { grid-template-columns: 1fr; }
+}
+
+/* ==========================================================================
+   Two-step returns, and asking for several items at once
+   ========================================================================== */
+
+/* The remark field on a staff member's submit button */
+.submit-form .field { margin-bottom: 9px; }
+.submit-form .field > span { font-size: 11.5px; }
+.submit-form input { font-size: 13px; padding: 8px 10px; }
+
+/* An admin checking an item in */
+.checkin-form {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.checkin-form .field { margin: 0; }
+.checkin-form .actions { display: flex; }
+@media (max-width: 720px) {
+  .checkin-form { grid-template-columns: 1fr; }
+}
+
+/* Requests asked for together, shown together */
+.batch {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blue);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: #fbfcfe;
+}
+.batch-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.batch-head h3 { font-size: 14.5px; }
+.batch-note { margin: 8px 0 12px; }
+.batch .request-card { background: var(--surface); }
+
+/* The bulk-request bar on the staff inventory */
+.bulk-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+  border: 1px solid var(--blue);
+  box-shadow: var(--shadow);
+}
+.bulk-count { font-size: 13.5px; color: var(--muted); padding-bottom: 9px; }
+.bulk-count b { font-size: 20px; color: var(--text); }
+.bulk-bar .field { margin: 0; flex: 1; min-width: 200px; }
+.bulk-note { flex-basis: 100%; margin: 0; }
+
+.bulk-tick { width: 17px; height: 17px; accent-color: var(--blue); cursor: pointer; flex-shrink: 0; }
+.item-card.is-picked { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+
+/* An item handed back but not yet checked in belongs to nobody */
+.badge-pending-return { background: var(--purple-soft); color: var(--purple); }
+
+/* Filter bar inside a side panel. It sticks to the top of the scrolling body
+   so a long list can be narrowed without scrolling back up to the controls. */
+.panel-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: flex-end;
+  padding: 12px;
+  margin: -4px 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: #fbfcfe;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.panel-filters .field { margin: 0; flex: 1 1 130px; min-width: 0; }
+.panel-filters .field > span { font-size: 11px; }
+.panel-filters input, .panel-filters select { padding: 7px 10px; font-size: 13px; }
+.panel-filters-search { flex-basis: 100%; }
+.panel-filters-actions { display: flex; gap: 6px; }

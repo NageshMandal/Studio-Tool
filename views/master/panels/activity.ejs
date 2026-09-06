@@ -1,0 +1,19 @@
+<%- include('./_filters', { panel: 'activity', fields: fields, query: query }) %>
+
+<p class="panel-lede">What has happened across every studio, most recent first.</p>
+
+<% if (events.length === 0) { %>
+  <p class="panel-empty">Nothing has happened yet.</p>
+<% } else { %>
+  <ul class="activity-list">
+    <% events.forEach(function (e) { %>
+      <li>
+        <span class="dot dot-<%= e.tone %>"></span>
+        <span class="activity-text">
+          <b><%= e.who %></b> <%= e.verb %> <b><%= e.what %></b><%= e.where ? ' at ' + e.where : '' %>
+        </span>
+        <span class="activity-when"><%= formatSince(e.at) %> ago</span>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>

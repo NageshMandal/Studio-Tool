@@ -31,6 +31,8 @@ router.post('/purchase-requests', staff.createPurchaseRequest);
 router.post('/purchase-requests/:id/cancel', staff.cancelPurchaseRequest);
 
 router.post('/occupy/:id', staff.occupy);
+// Several items in one go — one reason, one decision queue for the admin
+router.post('/requests', staff.requestMany);
 router.post('/return/:id', staff.returnItem);
 router.post('/book/:id', staff.book);
 router.post('/requests/:id/cancel', staff.cancelRequest);

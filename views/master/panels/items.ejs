@@ -1,0 +1,40 @@
+<%
+  /* Panel: the item register, optionally narrowed to one studio or category.
+     Each row opens the item's own panel rather than navigating away, so a
+     quick look does not cost you the dashboard you were reading. */
+%>
+<%- include('./_filters', { panel: 'items', fields: fields, query: query }) %>
+
+<p class="panel-lede">
+  <%= total %> item<%= total === 1 ? '' : 's' %><%= category ? ' in ' + category : '' %>.
+  <% if (truncated) { %>Showing the first <%= items.length %>.<% } %>
+</p>
+
+<% if (items.length === 0) { %>
+  <p class="panel-empty">Nothing here yet.</p>
+<% } else { %>
+  <ul class="panel-list">
+    <% items.forEach(function (i) { %>
+      <li class="panel-row">
+        <%- include('../../partials/thumb', { thumbUrl: i.imageUrl, thumbName: i.name }) %>
+        <span class="panel-row-main">
+          <b><%= i.name %></b>
+          <span class="panel-row-sub">
+            <span class="asset-tag"><%= i.assetTag %></span>
+            <%= i.studioName %> · <%= i.category || 'Uncategorised' %>
+          </span>
+        </span>
+        <span class="panel-row-actions">
+          <% if (i.assignedTo) { %>
+            <span class="badge badge-amber">With <%= i.assignedTo.name %></span>
+          <% } else { %>
+            <span class="badge badge-green">Available</span>
+          <% } %>
+          <button class="btn btn-ghost btn-sm" type="button"
+                  data-panel="item" data-params="id=<%= i._id %>"
+                  data-title="<%= i.name %>">View</button>
+        </span>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>

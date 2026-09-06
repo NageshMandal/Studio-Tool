@@ -1,6 +1,6 @@
 <%
   function rolePill(role) {
-    var cls = role === 'super' ? 'role-super' : (role === 'location_admin' ? 'role-admin' : 'role-manager');
+    var cls = role === 'super' ? 'role-super' : (role === 'location_admin' ? 'role-admin' : 'role-sub-admin');
     return '<span class="role-pill ' + cls + '">' + roleLabels[role] + '</span>';
   }
 %>
@@ -13,7 +13,7 @@
         <% if (can.isSuper) { %>
           Every administrator, across all studios
         <% } else { %>
-          Managers at your studio. Only the super admin can add another location admin.
+          Sub admins at your studio. Only the super admin can add another location admin.
         <% } %>
       </p>
     </div>
@@ -89,7 +89,7 @@
           <tr><td colspan="7">
             <div class="empty">
               <h3>No admins yet</h3>
-              <p>Add a location manager to help run this studio.</p>
+              <p>Add a location sub admin to help run this studio.</p>
             </div>
           </td></tr>
         <% } %>
@@ -116,11 +116,11 @@
         <p class="hint" style="margin-top: 5px">
           Full control of their own studio only — items, staff, approvals,
           reports — and the only person who decides its purchase requests. May
-          add location managers beneath them.
+          add location sub admins beneath them.
         </p>
       </div>
       <div>
-        <span>Location manager</span>
+        <span>Location sub admin</span>
         <b>Second-line help</b>
         <p class="hint" style="margin-top: 5px">
           Everything a location admin can do at the same studio, except managing

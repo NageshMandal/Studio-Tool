@@ -128,6 +128,200 @@ function shiftMonth(monthKey, delta) {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`;
 }
 
+/* ---- Date ranges, for every filter that picks a period ---------------- *
+ * One resolver behind the tracker, the usage log and the master dashboard,
+ * so "last 7 days" means the same thing on all three and a fix lands once.
+ *
+ * A range is two day keys plus the UTC instants those local days start and
+ * end at. Either end may be open: null `from` means "everything up to `to`",
+ * null on both means all time.
+ */
+
+const RANGE_PRESETS = [
+  { key: 'today', label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: '7d', label: 'Last 7 days' },
+  { key: '30d', label: 'Last 30 days' },
+  { key: 'month', label: 'This month' },
+  { key: 'all', label: 'All time' },
+];
+
+const isDayKey = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+
+/**
+ * Works out the period a request is asking for.
+ *
+ * Precedence is deliberate and is what lets the preset buttons work without
+ * any JavaScript: an explicit `range` preset always wins over the from/to
+ * boxes. The preset buttons submit `range`, the plain Filter button does not,
+ * so whichever the person actually pressed is the one that counts.
+ *
+ * `date=YYYY-MM-DD` is the old single-day parameter. It still resolves, to a
+ * range of that one day, so existing links and bookmarks keep working.
+ */
+function resolveRange(query, defaultPreset = 'today') {
+  const q = query || {};
+  const today = todayKey();
+  const asked = String(q.range || '').trim();
+
+  // A caller can only default to a real preset. Without this, a typo could
+  // send the "cleared the boxes" fallback below into infinite recursion.
+  const fallback = RANGE_PRESETS.some((p) => p.key === defaultPreset) ? defaultPreset : 'today';
+
+  // Read the boxes into locals rather than writing back onto req.query,
+  // which the view and other handlers still read from
+  let askedFrom = isDayKey(q.from) ? q.from : null;
+  let askedTo = isDayKey(q.to) ? q.to : null;
+
+  let preset;
+  if (asked && asked !== 'custom' && RANGE_PRESETS.some((p) => p.key === asked)) {
+    preset = asked;
+  } else if (asked === 'custom' || askedFrom || askedTo) {
+    preset = 'custom';
+  } else if (isDayKey(q.date)) {
+    preset = 'custom';
+    askedFrom = q.date;
+    askedTo = q.date;
+  } else {
+    preset = fallback;
+  }
+
+  let from = null;
+  let to = null;
+
+  switch (preset) {
+    case 'all':
+      break;
+    case 'yesterday':
+      from = to = shiftDay(today, -1);
+      break;
+    case '7d':
+      from = shiftDay(today, -6);
+      to = today;
+      break;
+    case '30d':
+      from = shiftDay(today, -29);
+      to = today;
+      break;
+    case 'month':
+      from = `${today.slice(0, 7)}-01`;
+      to = today;
+      break;
+    case 'custom':
+      from = askedFrom;
+      to = askedTo;
+      /**
+       * Both boxes empty, or filled with something that is not a date, is
+       * somebody clearing the filter — not asking for every movement ever
+       * recorded. Falling back to the page's own default keeps that from
+       * turning into an unbounded query by accident; "All time" is still
+       * available, but only by pressing the button that says so.
+       */
+      if (!from && !to) return resolveRange({ range: fallback }, fallback);
+      break;
+    case 'today':
+    default:
+      preset = 'today';
+      from = to = today;
+      break;
+  }
+
+  // Typed backwards. Reading it the way it was clearly meant beats showing
+  // an empty table and letting the person work out why.
+  if (from && to && from > to) {
+    const swap = from;
+    from = to;
+    to = swap;
+  }
+
+  return {
+    preset,
+    from,
+    to,
+    start: from ? dayRange(from).start : null,
+    end: to ? dayRange(to).end : null,
+    isAll: !from && !to,
+    isSingleDay: Boolean(from && to && from === to),
+    days: from && to ? Math.round((new Date(`${to}T12:00:00Z`) - new Date(`${from}T12:00:00Z`)) / 86400000) + 1 : null,
+    label: rangeLabel(from, to),
+  };
+}
+
+/** '2026-08-01', '2026-08-14' -> '1–14 Aug 2026'. Reads like a person wrote it. */
+function rangeLabel(from, to) {
+  if (!from && !to) return 'All time';
+
+  const parts = (key) => {
+    const d = new Date(`${key}T12:00:00Z`);
+    return {
+      day: d.getUTCDate(),
+      month: d.toLocaleDateString('en-IN', { timeZone: 'UTC', month: 'short' }),
+      year: d.getUTCFullYear(),
+    };
+  };
+
+  if (!from) { const t = parts(to); return `Up to ${t.day} ${t.month} ${t.year}`; }
+  if (!to) { const f = parts(from); return `From ${f.day} ${f.month} ${f.year}`; }
+
+  const f = parts(from);
+  const t = parts(to);
+  if (from === to) return `${f.day} ${f.month} ${f.year}`;
+  if (f.year === t.year && f.month === t.month) return `${f.day}–${t.day} ${t.month} ${t.year}`;
+  if (f.year === t.year) return `${f.day} ${f.month} – ${t.day} ${t.month} ${t.year}`;
+  return `${f.day} ${f.month} ${f.year} – ${t.day} ${t.month} ${t.year}`;
+}
+
+/**
+ * The `{ field: { $gte, $lt } }` clause for a range, or `{}` for all time.
+ * Returned as a clause to merge rather than applied here, so a caller can
+ * still express something more specific — the overlap rule the usage log
+ * needs, for instance, which is not a plain "started between" test.
+ */
+function rangeClause(field, range) {
+  if (!range || range.isAll) return {};
+  const bounds = {};
+  if (range.start) bounds.$gte = range.start;
+  if (range.end) bounds.$lt = range.end;
+  return { [field]: bounds };
+}
+
+/**
+ * Step a range backwards or forwards by its own length, for the ‹ › buttons.
+ * A single day moves a day, a week moves a week. Returns null for all time,
+ * which has nothing to step through.
+ */
+function shiftRange(range, direction) {
+  if (!range || range.isAll || !range.from || !range.to) return null;
+  const span = range.days;
+  return {
+    from: shiftDay(range.from, span * direction),
+    to: shiftDay(range.to, span * direction),
+  };
+}
+
+/**
+ * Rebuilds a query string with the range swapped out and everything else
+ * left alone, so stepping through periods does not quietly drop the staff or
+ * status the person had chosen.
+ */
+function rangeQuery(query, range, extra = {}) {
+  const params = new URLSearchParams();
+  Object.entries(query || {}).forEach(([key, value]) => {
+    if (['range', 'from', 'to', 'date', 'message'].includes(key)) return;
+    if (value) params.set(key, value);
+  });
+  if (range) {
+    if (range.from) params.set('from', range.from);
+    if (range.to) params.set('to', range.to);
+    if (!range.from && !range.to) params.set('range', 'all');
+  }
+  Object.entries(extra).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
 // Telegram messages are sent with parse_mode HTML
 function escapeHtml(text) {
   return String(text == null ? '' : text)
@@ -192,6 +386,12 @@ module.exports = {
   formatSince,
   dayRange,
   shiftDay,
+  RANGE_PRESETS,
+  resolveRange,
+  rangeLabel,
+  rangeClause,
+  shiftRange,
+  rangeQuery,
   escapeHtml,
   dateKeyOf,
   todayKey,

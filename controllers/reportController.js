@@ -372,7 +372,15 @@ exports.exportCsv = async (req, res, next) => {
     lines.push(`Active staff,${report.summary.activeStaff}`);
     lines.push('');
     lines.push('Movements');
-    lines.push('Asset tag,Item,Category,Person,Taken,Returned,Hours,Reason');
+    /**
+     * Both halves of the return are exported, not just the times. If an item
+     * came back damaged, the export is where somebody goes looking months
+     * later — a remark that only exists on a screen is not much of a record.
+     */
+    lines.push(
+      'Asset tag,Item,Category,Person,Taken,Submitted,Staff remark,' +
+        'Checked in,Checked in by,Admin remark,Condition set,Hours,Reason'
+    );
     report.logs.forEach((l) => {
       lines.push(
         [
@@ -382,6 +390,11 @@ exports.exportCsv = async (req, res, next) => {
           l.userName,
           l.occupiedAt ? new Date(l.occupiedAt).toISOString() : '',
           l.returnedAt ? new Date(l.returnedAt).toISOString() : 'still out',
+          l.submitRemark || '',
+          l.acceptedAt ? new Date(l.acceptedAt).toISOString() : (l.returnedAt ? 'not checked in' : ''),
+          l.acceptedBy || '',
+          l.acceptRemark || '',
+          l.acceptCondition || '',
           l.durationMinutes != null ? Math.round((l.durationMinutes / 60) * 10) / 10 : '',
           l.reason || '',
         ]

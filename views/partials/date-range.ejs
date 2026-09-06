@@ -1,0 +1,38 @@
+<%
+  /**
+   * The date range control, shared by every page that filters by period.
+   *
+   * Include it inside a GET form and pass:
+   *   range    the resolved range from resolveRange()
+   *   presets  which shortcut buttons to offer (keys from RANGE_PRESETS)
+   *   maxDate  optional, the latest selectable day
+   *
+   * The shortcuts are submit buttons named `range`, and the form's own
+   * Filter button is nameless. A button only submits its own name when it is
+   * the one pressed, so the server can tell a shortcut from a typed range
+   * with no JavaScript at all — which is why this keeps working if a script
+   * fails to load, and why the resolver treats `range` as the winner.
+   */
+  var presetKeys = typeof presets !== 'undefined' && presets ? presets : ['today', '7d', '30d', 'month'];
+  var max = typeof maxDate !== 'undefined' ? maxDate : null;
+%>
+
+<div class="range-filter">
+  <div class="range-presets">
+    <% RANGE_PRESETS.filter(function (p) { return presetKeys.indexOf(p.key) !== -1; }).forEach(function (p) { %>
+      <button class="range-chip <%= range.preset === p.key ? 'is-on' : '' %>"
+              type="submit" name="range" value="<%= p.key %>"><%= p.label %></button>
+    <% }); %>
+  </div>
+
+  <div class="range-dates">
+    <label class="field">
+      <span>From</span>
+      <input type="date" name="from" value="<%= range.from || '' %>" <%= max ? 'max="' + max + '"' : '' %> />
+    </label>
+    <label class="field">
+      <span>To</span>
+      <input type="date" name="to" value="<%= range.to || '' %>" <%= max ? 'max="' + max + '"' : '' %> />
+    </label>
+  </div>
+</div>

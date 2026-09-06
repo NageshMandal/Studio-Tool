@@ -20,9 +20,9 @@ const { ROOT_ID } = require('../middleware/auth');
  * most people want.
  *
  * Where they land afterwards depends on the role:
- *   super admin      → the studio selector ("Select Your Studio")
- *   location admin   → straight into their own studio's dashboard
- *   location manager → the same
+ *   super admin        → the studios page, to pick one
+ *   location admin     → straight into their own studio's dashboard
+ *   location sub admin → the same
  *   staff            → the staff portal
  */
 

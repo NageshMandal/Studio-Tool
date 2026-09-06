@@ -44,9 +44,14 @@ router.get('/', (req, res) =>
 
 /* ---------------- studios ---------------- */
 
-// The selector is open to any admin; for a location admin it simply shows
-// their own studio, which keeps the header's "switch studio" link honest.
-router.get('/studios', locations.selector);
+/**
+ * One screen for studios: picking, adding and editing all happen at
+ * /admin/studios. It is open to any admin — a location admin simply sees
+ * their own studio and no management controls, which keeps the header's
+ * "switch studio" link honest. The three URLs below it are the old separate
+ * pages, kept as redirects so existing links and bookmarks still land right.
+ */
+router.get('/studios', locations.hub);
 router.get('/studios/open/:id', requireSuper, locations.open);
 router.get('/studios/all', requireSuper, locations.openAll);
 
@@ -62,6 +67,20 @@ router.patch('/studios/:id/status', requireSuper, locations.toggleStatus);
 // Every studio at once — the super admin's overview
 router.get('/master', requireSuper, dashboard.master);
 
+/**
+ * The side panels behind the master dashboard's cards and lists. They return
+ * HTML fragments, fetched by the page rather than linked to, so a drill-down
+ * never costs the super admin the screen they were reading.
+ */
+router.get('/master/panel/:kind', requireSuper, dashboard.panel);
+
+/**
+ * Approving or declining from inside a panel. Super-admin only, and it
+ * grants nothing new: a super admin can already decide these from inside a
+ * studio. Purchase requests remain out of reach here as everywhere else.
+ */
+router.post('/master/decide', requireSuper, dashboard.decide);
+
 // One studio
 router.get('/dashboard', requireStudio, dashboard.dashboard);
 router.get('/tracker', requireStudio, products.tracker);
@@ -73,7 +92,7 @@ router.get('/products/new', requireStudio, products.newForm);
 router.post('/products', requireStudio, products.create);
 router.get('/products/:id/edit', requireStudio, products.editForm);
 router.put('/products/:id', requireStudio, products.update);
-// Deleting is a primary-admin action; a location manager can add and edit
+// Deleting is a primary-admin action; a location sub admin can add and edit
 router.delete('/products/:id', requireStudio, requirePrimaryAdmin, products.remove);
 
 /* ---------------- staff ---------------- */
@@ -93,6 +112,18 @@ router.delete('/users/:id', requireStudio, requirePrimaryAdmin, users.remove);
 /* ---------------- equipment requests and bookings ---------------- */
 
 router.get('/requests', requireStudio, requests.list);
+
+/**
+ * Items handed back by staff, waiting for an admin to check them in. The
+ * remark is what makes the record worth keeping, so it is required by the
+ * handler rather than by the form alone.
+ */
+router.post('/returns/:id/accept', requireStudio, requests.acceptReturn);
+
+// Several items asked for together, decided together. Declared before the
+// :id routes so "batch" is never read as a request id.
+router.post('/requests/batch/:batch/:action', requireStudio, requests.decideBatch);
+
 router.post('/requests/:id/approve', requireStudio, requests.approve);
 router.post('/requests/:id/reject', requireStudio, requests.reject);
 router.post('/requests/bookings/:id/approve', requireStudio, requests.approveBooking);

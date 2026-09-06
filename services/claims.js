@@ -98,8 +98,20 @@ async function releaseForClaim(claimId, holderUser) {
     return { ok: false, message: 'That one is not with you any more' };
   }
 
-  // releaseProduct fulfils the waiting claim automatically
-  await releaseProduct({ product, source: 'telegram' });
+  /**
+   * A next-in-line handover stays one step on purpose. The item is passing
+   * straight from one person to the next who is standing there waiting for
+   * it, with no moment where it is on a shelf to be checked — so parking it
+   * at `pending-return` would strand the claimant behind an admin for an
+   * item they can already see. The handover is recorded as such rather than
+   * left looking like an unchecked return.
+   */
+  await releaseProduct({
+    product,
+    source: 'telegram',
+    acceptedBy: 'system',
+    acceptRemark: 'Handed straight to the next person in line — not checked in separately',
+  });
 
   const fresh = await NextClaim.findById(claim._id).lean();
   const handedOver = fresh && fresh.status === 'fulfilled';

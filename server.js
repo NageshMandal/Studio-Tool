@@ -7,6 +7,7 @@ const methodOverride = require('method-override');
 const expressLayouts = require('express-ejs-layouts');
 
 const connectDB = require('./config/db');
+const Admin = require('./models/Admin');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const apiRoutes = require('./routes/apiRoutes');
@@ -18,6 +19,7 @@ const {
   formatDuration,
   formatSince,
   formatDay,
+  RANGE_PRESETS,
 } = require('./utils/format');
 const { icon } = require('./utils/icons');
 
@@ -57,6 +59,8 @@ app.use((req, res, next) => {
   res.locals.formatDuration = formatDuration;
   res.locals.formatSince = formatSince;
   res.locals.formatDay = formatDay;
+  // The shortcut buttons on the shared date range control
+  res.locals.RANGE_PRESETS = RANGE_PRESETS;
   // Available to every view, layout and partial — see utils/icons.js
   res.locals.icon = icon;
   next();
@@ -181,17 +185,25 @@ app.use('/staff', staffRoutes);
 const AssignmentRequest = require('./models/AssignmentRequest');
 const Booking = require('./models/Booking');
 const ProcurementRequest = require('./models/ProcurementRequest');
+const UsageLog = require('./models/UsageLog');
 const { protect } = require('./middleware/auth');
 const { withScope } = require('./middleware/scope');
 
 app.use('/admin', protect, withScope, async (req, res, next) => {
   try {
     const scoped = req.scope.filter({ status: 'pending' });
-    const [requests, bookings] = await Promise.all([
+    const [requests, bookings, checkIns] = await Promise.all([
       AssignmentRequest.countDocuments(scoped),
       Booking.countDocuments(scoped),
+      /**
+       * Items handed back but not yet checked in count towards the badge
+       * too. Such an item is off the shelf and cannot be taken by anybody,
+       * so a check-in queue nobody notices is the one real cost of the
+       * two-step return — the badge is where it gets noticed.
+       */
+      UsageLog.countDocuments(req.scope.filter({ returnedAt: { $ne: null }, acceptedAt: null })),
     ]);
-    res.locals.pendingRequestCount = requests + bookings;
+    res.locals.pendingRequestCount = requests + bookings + checkIns;
 
     res.locals.pendingPurchaseCount = req.can.viewProcurement
       ? await ProcurementRequest.countDocuments(req.scope.filter({ status: 'pending' }))
@@ -249,6 +261,18 @@ const { startBookingScheduler } = require('./services/bookingAutoAssign');
  */
 (async () => {
   await connectDB();
+
+  /**
+   * Carry any account still on the retired `location_manager` role over to
+   * `location_sub_admin`. Done before the first request is served, because a
+   * missed account would not error — it would just silently lose access.
+   */
+  try {
+    const moved = await Admin.migrateRoles();
+    if (moved) console.log(`Renamed ${moved} location manager account(s) to location sub admin`);
+  } catch (err) {
+    console.error('Could not migrate admin roles:', err.message);
+  }
 
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`Studio Tracker running on http://localhost:${PORT}`));

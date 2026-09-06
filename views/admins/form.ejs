@@ -7,7 +7,7 @@
         <% if (can.isSuper) { %>
           You can appoint a super admin, or a location admin for any studio
         <% } else { %>
-          You can add location managers to your own studio
+          You can add location sub admins to your own studio
         <% } %>
       </p>
     </div>
@@ -53,7 +53,7 @@
           <% if (lockedLocation) { %>
             <input type="text" value="<%= studios[0] ? studios[0].name : '' %>" disabled />
             <input type="hidden" name="location" value="<%= lockedLocation %>" />
-            <span class="help">Managers you add always belong to your own studio.</span>
+            <span class="help">Sub admins you add always belong to your own studio.</span>
           <% } else { %>
             <select name="location">
               <option value="">Select a studio…</option>
@@ -79,7 +79,7 @@
 <div class="alert alert-info" style="max-width: 720px">
   <b>One location admin per studio.</b> That keeps a single person clearly
   accountable for the studio's approvals and its budget. Extra help should be
-  added as a <b>location manager</b> instead.
+  added as a <b>location sub admin</b> instead.
 </div>
 
 <script>

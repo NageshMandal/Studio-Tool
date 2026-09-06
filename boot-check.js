@@ -13,6 +13,17 @@ process.env.PORT = '4999';
 const mongoose = require('mongoose');
 mongoose.connect = async () => ({ connection: { host: 'stub', name: 'stub' } });
 
+/**
+ * Startup runs the admin role migration before it starts listening, so that
+ * no request is ever served while an account is still on the retired
+ * `location_manager` key. There is no real database here, and mongoose would
+ * buffer that query until it timed out — so it is stubbed, exactly like the
+ * connection above. What is being checked here is route wiring, not the
+ * migration; perm-check covers why the migration has to exist.
+ */
+const Admin = require('./models/Admin');
+Admin.migrateRoles = async () => 0;
+
 require('./server.js');
 
 setTimeout(async () => {

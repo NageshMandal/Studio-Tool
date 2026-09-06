@@ -1,0 +1,77 @@
+<%
+  /* Panel: the approval queue, decided in place.
+     The buttons post back here and this same fragment is re-rendered with
+     the outcome, so approving five requests is five clicks rather than five
+     round trips through a page that keeps losing your place. */
+%>
+<% if (message) { %><div class="alert alert-info"><%= message %></div><% } %>
+
+<%- include('./_filters', { panel: 'pending', fields: fields, query: query }) %>
+
+<%
+  var total = requests.length + bookings.length;
+%>
+<p class="panel-lede">
+  <%= total %> waiting on a decision<%= total ? '.' : ' — the queue is clear.' %>
+</p>
+
+<% if (requests.length) { %>
+  <p class="panel-section">Item requests</p>
+  <ul class="panel-list">
+    <% requests.forEach(function (r) { %>
+      <li class="panel-row">
+        <%- include('../../partials/thumb', { thumbUrl: r.imageUrl, thumbName: r.productName }) %>
+        <span class="panel-row-main">
+          <b><%= r.productName %></b>
+          <span class="panel-row-sub">
+            <span class="asset-tag"><%= r.assetTag %></span> <%= r.locationName || '' %>
+          </span>
+          <span class="panel-row-sub">
+            <%= r.userName %> asked <%= formatWhen(r.createdAt) %><%= r.reason ? ' · ' + r.reason : '' %>
+          </span>
+        </span>
+        <span class="panel-row-actions panel-decide">
+          <button class="btn btn-ok btn-sm" type="button"
+                  data-decide="approve" data-kind="request" data-id="<%= r._id %>">Approve</button>
+          <button class="btn btn-danger btn-sm" type="button"
+                  data-decide="reject" data-kind="request" data-id="<%= r._id %>">Decline</button>
+        </span>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>
+
+<% if (bookings.length) { %>
+  <p class="panel-section">Bookings</p>
+  <ul class="panel-list">
+    <% bookings.forEach(function (b) { %>
+      <li class="panel-row">
+        <%- include('../../partials/thumb', { thumbUrl: b.imageUrl, thumbName: b.productName }) %>
+        <span class="panel-row-main">
+          <b><%= b.productName %></b>
+          <span class="panel-row-sub">
+            <span class="asset-tag"><%= b.assetTag %></span> <%= b.locationName || '' %>
+          </span>
+          <span class="panel-row-sub">
+            <%= b.userName %> for <%= formatDay(b.bookedFor) %><%= b.pickupTime ? ' at ' + b.pickupTime : '' %>
+          </span>
+        </span>
+        <span class="panel-row-actions panel-decide">
+          <button class="btn btn-ok btn-sm" type="button"
+                  data-decide="approve" data-kind="booking" data-id="<%= b._id %>">Confirm</button>
+          <button class="btn btn-danger btn-sm" type="button"
+                  data-decide="reject" data-kind="booking" data-id="<%= b._id %>">Decline</button>
+        </span>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>
+
+<% if (total === 0) { %>
+  <p class="panel-empty">Nothing is waiting for you.</p>
+<% } %>
+
+<p class="hint" style="margin-top: 14px">
+  Purchase requests are not shown here — they belong to each studio's own
+  admin and are private to the studio that raised them.
+</p>

@@ -3,16 +3,22 @@
   <div class="panel-head">
     <div>
       <h2>Studio tracker</h2>
-      <p class="sub">Every movement at <%= activeStudio.name %> on the chosen day</p>
+      <p class="sub">Every movement at <%= activeStudio.name %> · <%= range.label %></p>
     </div>
-    <a class="btn btn-primary btn-sm" href="/admin/products/new"><%- icon('plus', 15) %> Add new item</a>
+    <div class="btn-row">
+      <% if (prevUrl) { %>
+        <div class="month-nav">
+          <a class="btn btn-ghost btn-sm" href="<%= prevUrl %>" title="Previous <%= range.days %> day(s)">‹</a>
+          <a class="btn btn-ghost btn-sm" href="<%= nextUrl %>" title="Next <%= range.days %> day(s)">›</a>
+        </div>
+      <% } %>
+      <a class="btn btn-primary btn-sm" href="/admin/products/new"><%- icon('plus', 15) %> Add new item</a>
+    </div>
   </div>
 
   <form class="filters" method="GET" action="/admin/tracker">
-    <label class="field">
-      <span>Date</span>
-      <input type="date" name="date" value="<%= date %>" max="<%= today %>" />
-    </label>
+    <%- include('partials/date-range', { range: range, presets: ['today', 'yesterday', '7d', '30d', 'month'], maxDate: maxDate }) %>
+
     <label class="field">
       <span>Staff</span>
       <select name="staff">
@@ -38,7 +44,7 @@
 
   <% if (rows.length === 0) { %>
     <div class="empty">
-      <h3>Nothing on <%= formatDate(date) %></h3>
+      <h3>Nothing in <%= range.label %></h3>
       <p>No equipment movements matched those filters.</p>
     </div>
   <% } else { %>
@@ -75,5 +81,12 @@
         </tbody>
       </table>
     </div>
+
+    <% if (truncated) { %>
+      <p class="hint" style="padding: 12px 18px">
+        Showing the most recent <%= rowLimit %> of <%= totalCount %> movements.
+        Narrow the range to see the rest.
+      </p>
+    <% } %>
   <% } %>
 </section>

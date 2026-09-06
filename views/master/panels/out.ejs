@@ -1,0 +1,37 @@
+<%
+  /* Panel: what is out and who has it. The picture is the point — an admin
+     chasing a missing lens recognises it faster than they read a tag. */
+%>
+<%- include('./_filters', { panel: 'out', fields: fields, query: query }) %>
+
+<p class="panel-lede"><%= items.length %> item<%= items.length === 1 ? '' : 's' %> currently with somebody.</p>
+
+<% if (items.length === 0) { %>
+  <p class="panel-empty">Everything is on the shelf.</p>
+<% } else { %>
+  <ul class="panel-list">
+    <% items.forEach(function (i) { %>
+      <li class="panel-row">
+        <%- include('../../partials/thumb', { thumbUrl: i.imageUrl, thumbName: i.name }) %>
+        <span class="panel-row-main">
+          <b><%= i.name %></b>
+          <span class="panel-row-sub">
+            <span class="asset-tag"><%= i.assetTag %></span> <%= i.studioName %>
+          </span>
+          <span class="panel-row-sub">
+            <span class="person">
+              <span class="avatar"><%= ((i.assignedTo && i.assignedTo.name) || '?').trim().charAt(0).toUpperCase() %></span>
+              <%= i.assignedTo ? i.assignedTo.name : 'Unknown' %><%= i.assignedTo && i.assignedTo.department ? ' · ' + i.assignedTo.department : '' %>
+            </span>
+          </span>
+        </span>
+        <span class="panel-row-actions">
+          <span class="badge badge-amber">Out <%= formatSince(i.occupiedAt) %></span>
+          <button class="btn btn-ghost btn-sm" type="button"
+                  data-panel="item" data-params="id=<%= i._id %>"
+                  data-title="<%= i.name %>">View</button>
+        </span>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>

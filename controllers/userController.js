@@ -299,6 +299,8 @@ exports.transfer = async (req, res, next) => {
         source: 'admin',
         note: `Holder transferred to ${target.name}`,
         claims: false,
+        acceptedBy: req.admin.email || req.admin.name,
+        acceptRemark: `Checked in automatically: holder transferred to ${target.name}`,
       });
     }
 
@@ -388,7 +390,13 @@ exports.remove = async (req, res, next) => {
     // Release anything they were holding, closing their usage log entries
     const held = await Product.find({ assignedTo: user._id });
     for (const product of held) {
-      await releaseProduct({ product, source: 'admin', note: 'Holder removed from the register' });
+      await releaseProduct({
+        product,
+        source: 'admin',
+        note: 'Holder removed from the register',
+        acceptedBy: req.admin.email || req.admin.name,
+        acceptRemark: 'Checked in automatically: the holder was removed from the register',
+      });
     }
 
     // Their open requests and claims no longer mean anything

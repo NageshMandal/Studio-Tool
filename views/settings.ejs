@@ -9,13 +9,9 @@
         <div>
           <span>Role</span>
           <b>
-            <% if (can.isSuper) { %>
-              <span class="role-pill role-super">Super admin</span>
-            <% } else if (can.isLocationAdmin) { %>
-              <span class="role-pill role-admin">Location admin</span>
-            <% } else { %>
-              <span class="role-pill role-manager">Location manager</span>
-            <% } %>
+            <span class="role-pill <%= can.isSuper ? 'role-super' : (can.isLocationAdmin ? 'role-admin' : 'role-sub-admin') %>">
+              <%= can.roleLabel %>
+            </span>
           </b>
         </div>
         <div><span>Studio</span><b><%= studio ? studio.name : 'All studios' %></b></div>

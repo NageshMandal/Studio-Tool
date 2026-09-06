@@ -33,17 +33,24 @@
   <div class="panel-head">
     <div>
       <h2>Usage log</h2>
-      <p class="sub"><%= formatDate(date) %><%= isToday ? ' · today' : '' %> at <%= activeStudio.name %></p>
+      <p class="sub"><%= range.label %><%= isToday ? ' · today' : '' %> at <%= activeStudio.name %></p>
     </div>
-    <div class="month-nav">
-      <a class="btn btn-ghost btn-sm" href="/admin/logs?date=<%= prevDate %>">‹</a>
-      <span class="current"><%= formatDate(date) %></span>
-      <a class="btn btn-ghost btn-sm" href="/admin/logs?date=<%= nextDate %>">›</a>
-    </div>
+    <%
+      /* The arrows step by the length of the range you are looking at: a day
+         moves a day, a week moves a week. All time has nothing to step. */
+    %>
+    <% if (prevUrl) { %>
+      <div class="month-nav">
+        <a class="btn btn-ghost btn-sm" href="<%= prevUrl %>" title="Previous <%= range.days %> day(s)">‹</a>
+        <span class="current"><%= range.label %></span>
+        <a class="btn btn-ghost btn-sm" href="<%= nextUrl %>" title="Next <%= range.days %> day(s)">›</a>
+      </div>
+    <% } %>
   </div>
 
   <form class="filters" method="GET" action="/admin/logs">
-    <input type="hidden" name="date" value="<%= date %>" />
+    <%- include('../partials/date-range', { range: range, presets: ['today', 'yesterday', '7d', '30d', 'month'], maxDate: maxDate }) %>
+
     <label class="field">
       <span>Search</span>
       <input type="search" name="q" value="<%= query.q %>" placeholder="Item, tag or person" />
@@ -59,14 +66,14 @@
     </label>
     <div class="actions">
       <button class="btn btn-primary" type="submit">Filter</button>
-      <a class="btn btn-ghost" href="/admin/logs?date=<%= date %>">Reset</a>
+      <a class="btn btn-ghost" href="<%= resetUrl %>">Reset</a>
     </div>
   </form>
 
   <% if (logs.length === 0) { %>
     <div class="empty">
       <h3>Nothing logged</h3>
-      <p>No equipment moved on this day.</p>
+      <p>No equipment moved in <%= range.label.toLowerCase() === 'all time' ? 'any period on record' : range.label %>.</p>
     </div>
   <% } else { %>
     <div class="table-wrap">
@@ -95,5 +102,12 @@
         </tbody>
       </table>
     </div>
+
+    <% if (truncated) { %>
+      <p class="hint" style="padding: 12px 18px">
+        Showing the most recent <%= rowLimit %> of <%= totalCount %> movements.
+        Narrow the range, or export the CSV from Reports for the full list.
+      </p>
+    <% } %>
   <% } %>
 </section>

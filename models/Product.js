@@ -59,9 +59,15 @@ const productSchema = new mongoose.Schema(
       enum: ['new', 'good', 'needs-repair', 'retired'],
       default: 'good',
     },
+    /**
+     * `pending-return` is the gap between a staff member handing an item
+     * back and an admin checking it in. It is deliberately not 'available':
+     * nobody should be given an item whose condition has not been looked at
+     * yet, and that check is the whole reason the two-step return exists.
+     */
     status: {
       type: String,
-      enum: ['available', 'assigned', 'maintenance'],
+      enum: ['available', 'assigned', 'maintenance', 'pending-return'],
       default: 'available',
     },
 
