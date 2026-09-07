@@ -162,37 +162,8 @@
     </div>
     <p class="stat-note">Awaiting approval</p>
   </button>
-
-  <%
-    /**
-     * A zero here is almost always "no prices have been entered", not "the
-     * equipment is worthless" — so the card says which. A bare ₹0 under
-     * "Estimated value" reads as broken software and sends people looking
-     * for a bug that is not there.
-     */
-  %>
-  <button class="stat is-openable" type="button" data-panel="value"
-          data-title="Asset value"
-          data-params="<%= totals.pricedItems === 0 ? 'priced=no' : '' %>">
-    <div class="stat-head">
-      <div>
-        <span class="stat-label">Total asset value</span>
-        <div class="stat-value"><%= formatMoney(totals.totalValue) %></div>
-      </div>
-      <span class="stat-ico" style="background: var(--blue-soft); color: var(--blue)"><%- icon('report', 18) %></span>
-    </div>
-    <p class="stat-note">
-      <% if (totals.totalItems === 0) { %>
-        No items on the register yet
-      <% } else if (totals.pricedItems === 0) { %>
-        <span class="warn">No prices recorded yet — open to add them</span>
-      <% } else if (totals.unpricedItems > 0) { %>
-        From <%= totals.pricedItems %> of <%= totals.totalItems %> items ·
-        <span class="warn"><%= totals.unpricedItems %> unpriced</span>
-      <% } else { %>
-        All <%= totals.totalItems %> items priced
-      <% } %>
-    </p>
+  
+    
   </button>
 </section>
 
