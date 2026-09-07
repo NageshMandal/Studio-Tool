@@ -11,6 +11,8 @@ const path = require('path');
 const ejs = require('ejs');
 const { icon } = require('./utils/icons');
 const {
+  isOverdue,
+  overdueBy,
   resolveRange,
   RANGE_PRESETS,
   formatWhen,
@@ -104,6 +106,7 @@ const stats = {
   totalItems: 24, assignedItems: 6, availableItems: 14, maintenanceItems: 4,
   totalStaff: 8, takenToday: 5, returnedToday: 3,
   pendingRequests: 2, pendingBookings: 1, pendingTotal: 3, pendingCheckIns: 2,
+  pricedItems: 20, unpricedItems: 4, overdueItems: 2,
   totalValue: 1250000, assignedPct: 25, availablePct: 58.3, maintenancePct: 16.7,
 };
 
@@ -146,6 +149,7 @@ function baseLocals(role, activeStudio) {
     icon,
     formatWhen, formatTime, formatDuration, formatSince, formatDay,
     RANGE_PRESETS,
+    isOverdue, overdueBy, dueDefault: '2026-09-08T18:00',
     formatDate: (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—'),
     formatMoney: (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`,
   };
@@ -159,7 +163,7 @@ const PAGES = {
     totals: {
       studioCount: 3, totalItems: 36, staffCount: 14, outNow: 15, outPct: 41.7,
       pendingRequests: 4, pendingBookings: 2, pendingTotal: 6,
-      totalValue: 1245000, addedThisMonth: 4,
+      totalValue: 1245000, addedThisMonth: 4, pricedItems: 30, unpricedItems: 6, overdueItems: 3,
     },
     studios,
     issued: [log], issuedTotal: 42,
@@ -322,7 +326,16 @@ const PANEL_PAGES = {
     items: [{ ...item, studioName: 'Patna', assignedTo: { name: 'Amit Kumar' } }, { ...item, _id: 'p9', studioName: 'Ranchi', assignedTo: null }],
     total: 2, truncated: false, category: null,
   },
-  out: { items: [{ ...item, studioName: 'Patna', assignedTo: { name: 'Amit Kumar', department: 'Studio' } }] },
+  out: {
+    items: [
+      // One late, one not, so both branches of the row are exercised
+      { ...item, _id: 'p8', studioName: 'Patna', assignedTo: { name: 'Amit Kumar', department: 'Studio' },
+        dueAt: new Date(Date.now() - 5 * 3600000), returnRequestedAt: null },
+      { ...item, studioName: 'Ranchi', assignedTo: { name: 'Priya Singh' },
+        dueAt: new Date(Date.now() + 5 * 3600000), returnRequestedAt: null },
+    ],
+    overdueCount: 1,
+  },
   pending: {
     requests: [{ _id: 'r1', productName: 'Camera', assetTag: 'PAT-0001', imageUrl: null, userName: 'Amit', locationName: 'Patna', reason: 'Shoot', createdAt: new Date() }],
     bookings: [{ _id: 'b1', productName: 'Lens', assetTag: 'PAT-0002', imageUrl: null, userName: 'Priya', locationName: 'Patna', bookedFor: '2026-09-10', pickupTime: '09:00' }],
@@ -331,7 +344,7 @@ const PANEL_PAGES = {
   activity: { events: [{ tone: 'green', at: new Date(), who: 'Amit', verb: 'returned', what: 'Camera', where: 'Patna' }] },
   employees: { users: [{ ...person, studioName: 'Patna', status: 'active' }], total: 1, truncated: false },
   categories: { categories: [{ category: 'Camera', total: 10, pct: 28 }, { category: 'Lens', total: 8, pct: 22 }] },
-  value: { items: [{ ...item, studioName: 'Patna', price: 250000 }], totalValue: 1245000 },
+  value: { items: [{ ...item, studioName: 'Patna', price: 250000 }], totalValue: 1245000, unpricedCount: 6, showingUnpriced: false },
   item: { item: { ...item, studioName: 'Patna', assignedTo: { name: 'Amit Kumar', department: 'Studio' } }, history: [log] },
   employee: {
     user: { ...person, studioName: 'Patna', status: 'active' },
@@ -353,6 +366,7 @@ const staffLocals = () => ({
   icon,
   formatWhen, formatTime, formatDuration, formatSince, formatDay,
   RANGE_PRESETS,
+  isOverdue, overdueBy, dueDefault: '2026-09-08T18:00',
   formatDate: (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—'),
   formatMoney: (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`,
 });
@@ -439,6 +453,30 @@ function render(view, locals, label, assert) {
     }
   );
 
+  console.log('\n--- Deciding several requests at once ---');
+  await render(
+    'requests/index',
+    { ...baseLocals('location_admin', studio), ...PAGES['requests/index'] },
+    'location_admin    requests/index (bulk selection)',
+    (html) => {
+      if (!html.includes('id="bulkDecide"')) return 'no bulk decision form';
+      if (!html.includes('class="pick-tick"')) return 'requests cannot be ticked';
+      if (!html.includes('form="bulkDecide"')) return 'ticks are not tied to the form';
+      if (!html.includes('name="ids"')) return 'ticks do not submit request ids';
+      if (!html.includes('value="approve"') || !html.includes('value="reject"')) {
+        return 'the bar cannot both approve and decline';
+      }
+      if (!html.includes('data-scope="all"')) return 'no select-all for the whole queue';
+      // The per-batch select-all only works if the cards say which batch
+      // they belong to
+      if (!html.includes('data-batch="batch1"')) return 'batch cards are not grouped for select-all';
+      // Every pending request has to be tickable, batched or not
+      const ticks = (html.match(/class="pick-tick"/g) || []).length;
+      if (ticks !== 3) return `expected 3 tickable requests, found ${ticks}`;
+      return null;
+    }
+  );
+
   console.log('\n--- Requests page, quieter states ---');
   await render(
     'requests/index',
@@ -449,6 +487,185 @@ function render(view, locals, label, assert) {
     },
     'location_admin    requests/index (nothing waiting)'
   );
+
+  console.log('\n--- An overdue item is red where it matters ---');
+  const lateItem = {
+    ...item, _id: 'p7', name: 'Camera (Sony A7III)', assetTag: 'PAT-0001',
+    assignedTo: person._id, occupiedAt: new Date(Date.now() - 30 * 3600000),
+    dueAt: new Date(Date.now() - 5 * 3600000), returnRequestedAt: null,
+  };
+  const submittedLate = { ...lateItem, _id: 'p6', returnRequestedAt: new Date() };
+
+  await render(
+    'staff/dashboard',
+    { ...staffLocals(), ...STAFF_PAGES['staff/dashboard'], myItems: [lateItem] },
+    'staff dashboard   overdue item is flagged',
+    (html) => {
+      if (!html.includes('is-overdue')) return 'the card is not marked';
+      if (!html.includes('Overdue by')) return 'no nudge to submit it';
+      return null;
+    }
+  );
+
+  /**
+   * Once they have submitted it the wait is the admin's, so the nudge has to
+   * stop. Nagging somebody for a queue they are not in is how a warning
+   * becomes noise that gets ignored — including the times it is right.
+   */
+  await render(
+    'staff/dashboard',
+    { ...staffLocals(), ...STAFF_PAGES['staff/dashboard'], myItems: [submittedLate] },
+    'staff dashboard   submitted, so no longer nagged',
+    (html) => {
+      if (html.includes('Overdue by')) return 'still nagging after they submitted it';
+      if (!html.includes('Submitted for approval')) return 'does not say it was submitted';
+      return null;
+    }
+  );
+
+  await render(
+    'products/index',
+    { ...baseLocals('location_admin', studio), ...PAGES['products/index'], products: [lateItem] },
+    'item register     shows overdue',
+    (html) => (html.includes('Overdue') ? null : 'no overdue badge for the admin')
+  );
+
+  await render(
+    'dashboard',
+    { ...baseLocals('location_admin', studio), ...PAGES.dashboard, stats: { ...stats, overdueItems: 3 } },
+    'studio dashboard  overdue leads the to-do list',
+    (html) => {
+      if (!html.includes('3 items overdue')) return 'overdue not in the to-do list';
+      if (!html.includes('alert-error')) return 'the banner is not raised to red';
+      return null;
+    }
+  );
+
+  console.log('\n--- A zero asset value explains itself ---');
+  /**
+   * A bare ₹0 under "Estimated value" reads as broken software. These check
+   * the card says WHY it is zero, which is almost always that nobody has
+   * entered prices — not that the equipment is worthless.
+   */
+  await render(
+    'master-dashboard',
+    {
+      ...baseLocals('super', null),
+      ...PAGES['master-dashboard'],
+      totals: { ...PAGES['master-dashboard'].totals, totalValue: 0, pricedItems: 0, unpricedItems: 36 },
+    },
+    'master dashboard  zero value, no prices set',
+    (html) => {
+      if (!html.includes('No prices recorded yet')) return 'a bare zero with no explanation';
+      if (!html.includes("data-params=\"priced=no\"")) return 'card does not open the unpriced list';
+      return null;
+    }
+  );
+
+  await render(
+    'master-dashboard',
+    {
+      ...baseLocals('super', null),
+      ...PAGES['master-dashboard'],
+      totals: { ...PAGES['master-dashboard'].totals, totalValue: 1245000, pricedItems: 30, unpricedItems: 6 },
+    },
+    'master dashboard  partly priced',
+    (html) => {
+      if (!html.includes('6</span>') && !html.includes('6 unpriced')) return 'does not say how many are unpriced';
+      if (html.includes('No prices recorded yet')) return 'wrongly claims no prices at all';
+      return null;
+    }
+  );
+
+  await render(
+    'dashboard',
+    {
+      ...baseLocals('location_admin', studio),
+      ...PAGES.dashboard,
+      stats: { ...stats, totalValue: 0, pricedItems: 0, unpricedItems: 24 },
+    },
+    'studio dashboard  zero value, no prices set',
+    (html) => (html.includes('No prices recorded yet') ? null : 'a bare zero with no explanation')
+  );
+
+  await render(
+    'master/panels/value',
+    {
+      ...baseLocals('super', null),
+      items: [], totalValue: 0, unpricedCount: 36, showingUnpriced: false,
+      fields: [], query: {}, message: null,
+    },
+    'value panel      empty, and says how to fix it',
+    (html) => (html.includes('Switch the Price filter') ? null : 'no route to the unpriced items')
+  );
+
+  await render(
+    'master/panels/value',
+    {
+      ...baseLocals('super', null),
+      items: [{ ...item, studioName: 'Patna', price: 0 }],
+      totalValue: 0, unpricedCount: 36, showingUnpriced: true,
+      fields: [], query: { priced: 'no' }, message: null,
+    },
+    'value panel      lists the unpriced items',
+    (html) => (html.includes('No price') ? null : 'unpriced items are not marked')
+  );
+
+  console.log('\n--- Both return dates, in every state ---');
+  /**
+   * The three states a movement can be in. Each table has to show the right
+   * thing for all of them — an "Accepted" column that renders a date for a
+   * loan nobody has accepted yet would be a lie in the most load-bearing
+   * place in the system.
+   */
+  const STATES = {
+    occupied: { ...log, submittedAt: null, returnedAt: null, durationMinutes: null },
+    'submitted, awaiting approval': {
+      ...log, submittedAt: new Date(), submitRemark: 'Lens cap missing',
+      returnedAt: null, durationMinutes: null,
+    },
+    accepted: {
+      ...log, submittedAt: new Date(Date.now() - 3600000), submitRemark: 'Lens cap missing',
+      returnedAt: new Date(), acceptRemark: 'Cap replaced', acceptedBy: 'admin@office.com',
+      durationMinutes: 240,
+    },
+  };
+
+  for (const [state, row] of Object.entries(STATES)) {
+    await render(
+      'logs/index',
+      { ...baseLocals('location_admin', studio), ...PAGES['logs/index'], logs: [row] },
+      `usage log         ${state}`,
+      (html) => {
+        const submitted = Boolean(row.submittedAt);
+        const accepted = Boolean(row.returnedAt);
+        if (!html.includes('<th>Submitted</th>')) return 'no Submitted column';
+        if (!html.includes('<th>Accepted</th>')) return 'no Accepted column';
+        if (accepted && !html.includes('Cap replaced')) return 'accept remark missing';
+        if (submitted && !html.includes('Lens cap missing')) return 'submit remark missing';
+        if (!accepted && submitted && !html.includes('Awaiting approval')) return 'not shown as awaiting approval';
+        if (!accepted && !submitted && !html.includes('Occupied')) return 'not shown as occupied';
+        if (!accepted && html.includes('admin@office.com')) return 'shows an accepter for an unaccepted loan';
+        return null;
+      }
+    );
+  }
+
+  for (const [view, name, locals] of [
+    ['tracker', 'tracker', () => ({ ...baseLocals('location_admin', studio), ...PAGES.tracker, rows: [STATES.accepted] })],
+    ['reports/monthly', 'monthly report', () => ({
+      ...baseLocals('location_admin', studio), ...PAGES['reports/monthly'],
+      report: { ...PAGES['reports/monthly'].report, logs: [STATES.accepted] },
+    })],
+    ['dashboard', 'studio dashboard', () => ({ ...baseLocals('location_admin', studio), ...PAGES.dashboard, todayLogs: [STATES.accepted] })],
+  ]) {
+    await render(view, locals(), `${name.padEnd(17)} shows both dates`, (html) => {
+      if (!html.includes('<th>Submitted</th>')) return 'no Submitted column';
+      if (!html.includes('<th>Accepted</th>')) return 'no Accepted column';
+      if (!html.includes('Cap replaced')) return 'accept remark missing';
+      return null;
+    });
+  }
 
   console.log('\n--- Master dashboard side panels ---');
   /**

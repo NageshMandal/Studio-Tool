@@ -27,6 +27,22 @@
 <form class="panel filters filters-lead" method="GET" action="/admin/master">
   <%- include('partials/date-range', { range: range, presets: ['today', '7d', '30d', 'month', 'all'], maxDate: maxDate }) %>
 
+  <%
+    /**
+     * Free-text search, across every field a person might have in mind.
+     *
+     * It sits above the dropdowns because it is usually the faster way in:
+     * the item list runs to dozens of entries, and typing "cemera" beats
+     * scrolling to find it. The dropdowns pin an exact record; this finds
+     * one when you only half remember it.
+     */
+  %>
+  <label class="field field-wide">
+    <span>Search anything</span>
+    <input type="search" name="q" value="<%= query.q %>" autocomplete="off"
+           placeholder="Item, asset tag, person, studio or reason — e.g. PAT-0004, mic, Ritu" />
+  </label>
+
   <label class="field">
     <span>Studio</span>
     <select name="studio">
@@ -63,7 +79,7 @@
     <span>Transaction</span>
     <select name="type">
       <option value="">All (issue / return)</option>
-      <option value="issue" <%= query.type === 'issue' ? 'selected' : '' %>>Still out</option>
+      <option value="issue" <%= query.type === 'issue' ? 'selected' : '' %>>Occupied</option>
       <option value="return" <%= query.type === 'return' ? 'selected' : '' %>>Returned</option>
     </select>
   </label>
@@ -119,7 +135,9 @@
     <p class="stat-note">Active staff</p>
   </button>
 
-  <button class="stat is-openable" type="button" data-panel="out" data-title="Items currently out">
+  <button class="stat is-openable" type="button" data-panel="out"
+          data-title="Items currently out"
+          data-params="<%= totals.overdueItems > 0 ? 'late=yes' : '' %>">
     <div class="stat-head">
       <div>
         <span class="stat-label">Items currently out</span>
@@ -127,7 +145,11 @@
       </div>
       <span class="stat-ico" style="background: var(--amber-soft); color: var(--amber)"><%- icon('arrow', 18) %></span>
     </div>
-    <p class="stat-note"><%= totals.outPct %>% of the register</p>
+    <p class="stat-note">
+      <%= totals.outPct %>% of the register<% if (totals.overdueItems > 0) { %>
+        · <span class="danger"><%= totals.overdueItems %> overdue</span>
+      <% } %>
+    </p>
   </button>
 
   <button class="stat is-openable" type="button" data-panel="pending" data-title="Pending requests">
@@ -141,7 +163,17 @@
     <p class="stat-note">Awaiting approval</p>
   </button>
 
-  <button class="stat is-openable" type="button" data-panel="value" data-title="Asset value">
+  <%
+    /**
+     * A zero here is almost always "no prices have been entered", not "the
+     * equipment is worthless" — so the card says which. A bare ₹0 under
+     * "Estimated value" reads as broken software and sends people looking
+     * for a bug that is not there.
+     */
+  %>
+  <button class="stat is-openable" type="button" data-panel="value"
+          data-title="Asset value"
+          data-params="<%= totals.pricedItems === 0 ? 'priced=no' : '' %>">
     <div class="stat-head">
       <div>
         <span class="stat-label">Total asset value</span>
@@ -149,7 +181,18 @@
       </div>
       <span class="stat-ico" style="background: var(--blue-soft); color: var(--blue)"><%- icon('report', 18) %></span>
     </div>
-    <p class="stat-note">Estimated value</p>
+    <p class="stat-note">
+      <% if (totals.totalItems === 0) { %>
+        No items on the register yet
+      <% } else if (totals.pricedItems === 0) { %>
+        <span class="warn">No prices recorded yet — open to add them</span>
+      <% } else if (totals.unpricedItems > 0) { %>
+        From <%= totals.pricedItems %> of <%= totals.totalItems %> items ·
+        <span class="warn"><%= totals.unpricedItems %> unpriced</span>
+      <% } else { %>
+        All <%= totals.totalItems %> items priced
+      <% } %>
+    </p>
   </button>
 </section>
 
@@ -159,11 +202,13 @@
       <div class="panel-head">
         <div>
           <h2><%- icon('box', 17) %> Recent issued items</h2>
-          <p class="sub">Latest items issued to employees · <%= range.label %></p>
+          <p class="sub">
+            Latest items issued to employees · <%= range.label %><%= query.q ? ' · matching “' + query.q + '”' : '' %>
+          </p>
         </div>
         <button class="btn btn-ghost btn-sm" type="button"
                 data-panel="issued" data-title="Issued items"
-                data-params="<%= 'from=' + (range.from || '') + '&to=' + (range.to || '') + '&studio=' + query.studio + '&staff=' + query.staff + '&product=' + query.product + '&type=' + query.type %>">
+                data-params="<%= 'from=' + (range.from || '') + '&to=' + (range.to || '') + '&studio=' + query.studio + '&staff=' + query.staff + '&product=' + query.product + '&type=' + query.type + '&q=' + encodeURIComponent(query.q) %>">
           View all
         </button>
       </div>
@@ -171,15 +216,18 @@
       <% if (issued.length === 0) { %>
         <div class="empty">
           <h3>Nothing in <%= range.label %></h3>
-          <p>No equipment movements matched those filters.</p>
+          <p>
+            No equipment movements matched<%= query.q ? ' “' + query.q + '”' : ' those filters' %>.
+            <% if (query.q) { %>Try a shorter search, or clear it.<% } %>
+          </p>
         </div>
       <% } else { %>
         <div class="table-wrap">
           <table class="table">
             <thead>
               <tr>
-                <th>#</th><th>Date &amp; time</th><th>Employee</th><th>Studio</th>
-                <th>Item (asset)</th><th>Issued via</th><th>Duration</th><th>Status</th>
+                <th>#</th><th>Taken</th><th>Employee</th><th>Studio</th>
+                <th>Item (asset)</th><th>Submitted</th><th>Accepted</th><th>Duration</th><th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -193,13 +241,15 @@
                     <span class="row-title"><%= r.productName %></span>
                     <span class="row-sub"><%= r.assetTag %></span>
                   </td>
-                  <td><span class="badge badge-grey"><%= r.source || 'admin' %></span></td>
+                  <%- include('partials/return-cells', { log: r }) %>
                   <td><%= r.durationMinutes != null ? formatDuration(r.durationMinutes) : formatSince(r.occupiedAt) %></td>
                   <td>
                     <% if (r.returnedAt) { %>
                       <span class="badge badge-green">Returned</span>
+                    <% } else if (r.submittedAt) { %>
+                      <span class="badge badge-purple">Awaiting approval</span>
                     <% } else { %>
-                      <span class="badge badge-blue">In progress</span>
+                      <span class="badge badge-blue">Occupied</span>
                     <% } %>
                   </td>
                 </tr>

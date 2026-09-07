@@ -7,6 +7,22 @@ const methodOverride = require('method-override');
 const expressLayouts = require('express-ejs-layouts');
 
 const connectDB = require('./config/db');
+
+/**
+ * The default "return by", formatted for a datetime-local input, which
+ * insists on YYYY-MM-DDTHH:mm in the viewer's own reckoning of local time.
+ * Built from the studio timezone so the box shows 6pm to somebody in Patna,
+ * not 6pm UTC.
+ */
+function dueDefaultValue() {
+  const due = defaultDueAt();
+  const parts = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: process.env.TIMEZONE || 'Asia/Kolkata',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(due);
+  return parts.replace(' ', 'T');
+}
 const Admin = require('./models/Admin');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
@@ -20,6 +36,10 @@ const {
   formatSince,
   formatDay,
   RANGE_PRESETS,
+  searchRegex,
+  isOverdue,
+  overdueBy,
+  defaultDueAt,
 } = require('./utils/format');
 const { icon } = require('./utils/icons');
 
@@ -61,6 +81,11 @@ app.use((req, res, next) => {
   res.locals.formatDay = formatDay;
   // The shortcut buttons on the shared date range control
   res.locals.RANGE_PRESETS = RANGE_PRESETS;
+  // One definition of "late", shared by the staff screens and the admin ones
+  res.locals.isOverdue = isOverdue;
+  res.locals.overdueBy = overdueBy;
+  // Pre-fills every "return by" box on the staff side
+  res.locals.dueDefault = dueDefaultValue();
   // Available to every view, layout and partial — see utils/icons.js
   res.locals.icon = icon;
   next();
@@ -107,12 +132,13 @@ app.get('/shelf/:studioId', async (req, res, next) => {
     // The listing honours the filters; the stat cards always show the whole
     // studio, so the wall screen keeps its true totals.
     const filter = { location: studio._id };
-    if (q) {
+    const rx = searchRegex(q);
+    if (rx) {
       filter.$or = [
-        { name: new RegExp(q, 'i') },
-        { assetTag: new RegExp(q, 'i') },
-        { brand: new RegExp(q, 'i') },
-        { serialNumber: new RegExp(q, 'i') },
+        { name: rx },
+        { assetTag: rx },
+        { brand: rx },
+        { serialNumber: rx },
       ];
     }
     if (category) filter.category = category;

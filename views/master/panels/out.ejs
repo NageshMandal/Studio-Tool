@@ -4,14 +4,20 @@
 %>
 <%- include('./_filters', { panel: 'out', fields: fields, query: query }) %>
 
-<p class="panel-lede"><%= items.length %> item<%= items.length === 1 ? '' : 's' %> currently with somebody.</p>
+<p class="panel-lede">
+  <%= items.length %> item<%= items.length === 1 ? '' : 's' %> currently with somebody.
+  <% if (overdueCount > 0) { %>
+    <br /><span class="danger"><%= overdueCount %> past the time the holder gave</span> — those are listed first.
+  <% } %>
+</p>
 
 <% if (items.length === 0) { %>
   <p class="panel-empty">Everything is on the shelf.</p>
 <% } else { %>
   <ul class="panel-list">
     <% items.forEach(function (i) { %>
-      <li class="panel-row">
+      <% var late = isOverdue(i); %>
+      <li class="panel-row <%= late ? 'is-overdue' : '' %>">
         <%- include('../../partials/thumb', { thumbUrl: i.imageUrl, thumbName: i.name }) %>
         <span class="panel-row-main">
           <b><%= i.name %></b>
@@ -26,7 +32,14 @@
           </span>
         </span>
         <span class="panel-row-actions">
-          <span class="badge badge-amber">Out <%= formatSince(i.occupiedAt) %></span>
+          <% if (late) { %>
+            <span class="badge badge-red">Overdue <%= overdueBy(i) %></span>
+          <% } else { %>
+            <span class="badge badge-amber">Out <%= formatSince(i.occupiedAt) %></span>
+          <% } %>
+          <% if (i.dueAt) { %>
+            <span class="panel-row-sub">Due <%= formatWhen(i.dueAt) %></span>
+          <% } %>
           <button class="btn btn-ghost btn-sm" type="button"
                   data-panel="item" data-params="id=<%= i._id %>"
                   data-title="<%= i.name %>">View</button>

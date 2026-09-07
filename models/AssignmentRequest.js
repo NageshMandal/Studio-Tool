@@ -29,6 +29,16 @@ const assignmentRequestSchema = new mongoose.Schema(
     reason: { type: String, trim: true, maxlength: 120, default: null },
 
     /**
+     * When the requester says they will bring it back. Carried onto the loan
+     * when an admin approves, which is what makes an item overdue later.
+     *
+     * It is asked for at the request, not set by an admin afterwards,
+     * because the person who knows how long a shoot runs is the person doing
+     * the shoot. An admin can still see and chase it.
+     */
+    dueAt: { type: Date, default: null },
+
+    /**
      * Requests asked for together share a batch id.
      *
      * The alternative — one document holding an array of items — was not

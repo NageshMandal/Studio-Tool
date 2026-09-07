@@ -14,7 +14,7 @@
   </div>
   <div class="stat tone-amber">
     <div class="stat-head">
-      <div><span class="stat-label">Still out</span><div class="stat-value"><%= summary.stillOut %></div></div>
+      <div><span class="stat-label">Occupied</span><div class="stat-value"><%= summary.stillOut %></div></div>
       <span class="stat-ico"><%- icon('clock', 18) %></span>
     </div>
   </div>
@@ -79,7 +79,7 @@
     <div class="table-wrap">
       <table class="table">
         <thead>
-          <tr><th></th><th>Asset tag</th><th>Item</th><th>Person</th><th>Taken</th><th>Returned</th><th>Held</th><th>Reason</th></tr>
+          <tr><th></th><th>Asset tag</th><th>Item</th><th>Person</th><th>Taken</th><th>Submitted</th><th>Accepted</th><th>Held</th><th>Reason</th></tr>
         </thead>
         <tbody>
           <% logs.forEach(function (l) { %>
@@ -91,10 +91,7 @@
               <td><span class="row-title"><%= l.productName %></span></td>
               <td><%= l.userName %></td>
               <td><%= formatWhen(l.occupiedAt) %></td>
-              <td>
-                <% if (l.returnedAt) { %><%= formatWhen(l.returnedAt) %>
-                <% } else { %><span class="badge badge-amber">Still out</span><% } %>
-              </td>
+              <%- include('../partials/return-cells', { log: l }) %>
               <td><%= l.durationMinutes != null ? formatDuration(l.durationMinutes) : formatSince(l.occupiedAt) %></td>
               <td><%= l.reason || '—' %></td>
             </tr>

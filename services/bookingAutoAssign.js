@@ -31,7 +31,22 @@ async function fulfillBooking(booking, product, user, { notify = true } = {}) {
   // Lazy require: occupancy.js also requires this file on release
   const { occupyProduct } = require('./occupancy');
 
-  await occupyProduct({ product, user, reason: booking.reason, source: 'auto' });
+  /**
+   * A booking already says when it is being dropped back, so that becomes
+   * the return time rather than the generic default — the person told us,
+   * and ignoring it would make their own booking overdue on our terms.
+   */
+  const dropAt = booking.dropDate
+    ? new Date(`${booking.dropDate}T${booking.dropTime || '18:00'}:00`)
+    : null;
+
+  await occupyProduct({
+    product,
+    user,
+    reason: booking.reason,
+    source: 'auto',
+    dueAt: dropAt,
+  });
 
   booking.fulfilledAt = new Date();
   await booking.save();

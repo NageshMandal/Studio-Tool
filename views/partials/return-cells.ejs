@@ -1,0 +1,56 @@
+<%
+  /**
+   * The two halves of a return, as two table cells.
+   *
+   * Written once and included by every movement table — the usage log, the
+   * tracker, the monthly report and the master dashboard — so "submitted"
+   * and "accepted" mean and look like the same thing wherever somebody
+   * meets them, and a change lands in one place.
+   *
+   * Include it with `log` set to the movement row. It emits exactly two
+   * <td> elements, so a table using it needs a Submitted and an Accepted
+   * column header, in that order.
+   *
+   * Each remark is shown under its own date rather than in a column of its
+   * own: the remark is only meaningful next to the moment it was made, and
+   * two more columns would push the tables past readable.
+   */
+  var _l = log;
+%>
+<td class="return-cell">
+  <% if (_l.submittedAt) { %>
+    <span class="row-title"><%= formatWhen(_l.submittedAt) %></span>
+    <% if (_l.submitRemark) { %>
+      <span class="row-sub" title="<%= _l.submitRemark %>">“<%= _l.submitRemark %>”</span>
+    <% } %>
+  <% } else if (_l.returnedAt) { %>
+    <%
+      /* Returned with no submission of its own: an admin did it directly,
+         or it passed straight to the next person in line. Saying so is
+         better than an empty cell that looks like missing data. */
+    %>
+    <span class="row-sub">Returned by an admin</span>
+  <% } else { %>
+    <span class="row-sub">—</span>
+  <% } %>
+</td>
+
+<td class="return-cell">
+  <% if (_l.returnedAt) { %>
+    <span class="row-title"><%= formatWhen(_l.returnedAt) %></span>
+    <% if (_l.acceptRemark) { %>
+      <span class="row-sub" title="<%= _l.acceptRemark %>">“<%= _l.acceptRemark %>”</span>
+    <% } %>
+    <% if (_l.acceptedBy) { %>
+      <span class="row-sub"><%= _l.acceptedBy %></span>
+    <% } %>
+  <% } else if (_l.submittedAt) { %>
+    <span class="badge badge-purple">Awaiting approval</span>
+  <% } else { %>
+    <% if (isOverdue(_l)) { %>
+      <span class="badge badge-red">Overdue <%= overdueBy(_l) %></span>
+    <% } else { %>
+      <span class="badge badge-amber">Occupied</span>
+    <% } %>
+  <% } %>
+</td>

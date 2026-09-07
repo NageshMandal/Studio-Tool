@@ -6,7 +6,7 @@ const UsageLog = require('../models/UsageLog');
 const AssignmentRequest = require('../models/AssignmentRequest');
 const Booking = require('../models/Booking');
 const ProcurementRequest = require('../models/ProcurementRequest');
-const { dayRange, todayKey, TZ } = require('../utils/format');
+const { dayRange, todayKey, TZ, overdueClause } = require('../utils/format');
 const masterData = require('../services/masterData');
 const approvals = require('../services/approvals');
 
@@ -41,6 +41,8 @@ async function studioStats(locationId) {
     pendingBookings,
     pendingCheckIns,
     valueAgg,
+    pricedItems,
+    overdueItems,
   ] = await Promise.all([
     Product.countDocuments(match),
     Product.countDocuments({ ...match, assignedTo: { $ne: null } }),
@@ -54,6 +56,10 @@ async function studioStats(locationId) {
     // Submitted by their holder, still with them, waiting on an admin
     UsageLog.countDocuments({ ...match, submittedAt: { $ne: null }, returnedAt: null }),
     Product.aggregate([{ $match: match }, { $group: { _id: null, value: { $sum: '$price' } } }]),
+    // So a zero total can say "no prices set" instead of looking broken
+    Product.countDocuments({ ...match, price: { $gt: 0 } }),
+    // Past their return time and still in somebody's hands
+    Product.countDocuments({ ...match, ...overdueClause() }),
   ]);
 
   const pct = (n) => (totalItems ? Math.round((n / totalItems) * 1000) / 10 : 0);
@@ -71,6 +77,9 @@ async function studioStats(locationId) {
     pendingCheckIns,
     pendingTotal: pendingRequests + pendingBookings,
     totalValue: valueAgg[0] ? valueAgg[0].value : 0,
+    pricedItems,
+    unpricedItems: totalItems - pricedItems,
+    overdueItems,
     assignedPct: pct(assignedItems),
     availablePct: pct(availableItems),
     maintenancePct: pct(maintenanceItems),

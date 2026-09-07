@@ -485,3 +485,99 @@
 
   refresh();
 })();
+
+/**
+ * Deciding several requests at once, on the admin Requests page.
+ *
+ * The batch buttons further down that page handle one person's basket. This
+ * handles a whole morning's queue: tick anything, from any number of people,
+ * and approve or decline the lot.
+ *
+ * The bar stays hidden until something is ticked, so the far more common
+ * single-decision path is not made to read around an empty toolbar.
+ */
+(function () {
+  var form = document.getElementById('bulkDecide');
+  if (!form) return;
+
+  var count = document.getElementById('pickCount');
+  var people = document.getElementById('pickPeople');
+  var clear = document.getElementById('pickClear');
+
+  var ticks = function () { return Array.prototype.slice.call(document.querySelectorAll('.pick-tick')); };
+  var chosen = function () { return ticks().filter(function (t) { return t.checked; }); };
+
+  function refresh() {
+    var picked = chosen();
+
+    ticks().forEach(function (t) {
+      var card = t.closest('.request-card');
+      if (card) card.classList.toggle('is-picked', t.checked);
+    });
+
+    count.textContent = picked.length;
+
+    // Naming how many people are affected, because approving nine requests
+    // across four people is a bigger act than approving one person's four
+    var names = {};
+    picked.forEach(function (t) { names[t.getAttribute('data-user')] = true; });
+    var howMany = Object.keys(names).length;
+    people.textContent = howMany > 1 ? ' across ' + howMany + ' people' : '';
+
+    form.hidden = picked.length === 0;
+
+    // Keep each select-all honest about what is under it
+    document.querySelectorAll('.pick-all').forEach(function (box) {
+      var scope = scopeTicks(box.getAttribute('data-scope'));
+      var on = scope.filter(function (t) { return t.checked; }).length;
+      box.checked = scope.length > 0 && on === scope.length;
+      box.indeterminate = on > 0 && on < scope.length;
+    });
+  }
+
+  function scopeTicks(scope) {
+    if (scope === 'all') return ticks();
+    var group = document.querySelector('[data-batch="' + scope + '"]');
+    return group ? Array.prototype.slice.call(group.querySelectorAll('.pick-tick')) : [];
+  }
+
+  document.addEventListener('change', function (e) {
+    if (e.target.classList && e.target.classList.contains('pick-tick')) return refresh();
+
+    if (e.target.classList && e.target.classList.contains('pick-all')) {
+      var on = e.target.checked;
+      scopeTicks(e.target.getAttribute('data-scope')).forEach(function (t) { t.checked = on; });
+      refresh();
+    }
+  });
+
+  clear.addEventListener('click', function () {
+    ticks().forEach(function (t) { t.checked = false; });
+    refresh();
+  });
+
+  /**
+   * Declining asks for a note first; approving does not. The prompt has to
+   * know which button was pressed, so it reads the submitter rather than
+   * assuming — a shared data-note on the form would interrogate people who
+   * only meant to approve.
+   */
+  form.addEventListener('submit', function (e) {
+    var action = e.submitter ? e.submitter.value : 'approve';
+    var picked = chosen();
+
+    if (action === 'reject') {
+      var note = window.prompt(
+        'Declining ' + picked.length + ' request(s). Add a note for them (optional):',
+        ''
+      );
+      if (note === null) { e.preventDefault(); return; }
+      form.querySelector('input[name="note"]').value = note;
+    } else if (picked.length > 3) {
+      // A quiet double-check on the sweeping ones only
+      if (!window.confirm('Approve ' + picked.length + ' requests?')) e.preventDefault();
+    }
+  });
+
+  refresh();
+})();

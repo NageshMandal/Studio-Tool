@@ -79,15 +79,31 @@
     <% } else { %>
       <div class="item-grid">
         <% myItems.forEach(function (p) { %>
-          <div class="item-card">
+          <% var overdue = isOverdue(p); %>
+          <div class="item-card <%= overdue ? 'is-overdue' : '' %>">
             <div class="top">
               <%- include('../partials/thumb', { thumbUrl: p.imageUrl, thumbName: p.name }) %>
               <div style="min-width: 0">
                 <h4><%= p.name %></h4>
                 <span class="row-sub"><%= p.assetTag %></span>
                 <p class="hint">Since <%= formatWhen(p.occupiedAt) %> · <%= formatSince(p.occupiedAt) %></p>
+                <% if (p.dueAt && !overdue && !p.returnRequestedAt) { %>
+                  <p class="hint">Due back <%= formatWhen(p.dueAt) %></p>
+                <% } %>
               </div>
             </div>
+
+            <% if (overdue) { %>
+              <%
+                /* Loud on purpose, and only for items still in this person's
+                   hands. Once they have submitted it, the wait is the
+                   admin's and nagging them would be blaming the wrong side. */
+              %>
+              <div class="alert alert-error overdue-nudge">
+                <b>Overdue by <%= overdueBy(p) %>.</b>
+                It was due <%= formatWhen(p.dueAt) %> — please submit it.
+              </div>
+            <% } %>
 
             <% if (claimByProduct[String(p._id)]) { %>
               <div class="alert alert-warn" style="margin: 0; font-size: 12.5px">
@@ -213,7 +229,7 @@
       <% if (myPurchases.length === 0) { %>
         <div class="empty">
           <p>Need something the studio doesn't own?</p>
-          <a class="btn btn-primary" href="/staff/purchase-requests">Request an item</a>
+          <a class="btn btn-primary" href="/staff/purchase-requests">Purchase Request</a>
         </div>
       <% } else { %>
         <table class="table">

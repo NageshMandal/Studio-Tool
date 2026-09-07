@@ -5,7 +5,7 @@ const User = require('../models/User');
 const UsageLog = require('../models/UsageLog');
 const AssignmentRequest = require('../models/AssignmentRequest');
 const Booking = require('../models/Booking');
-const { resolveRange, rangeClause } = require('../utils/format');
+const { resolveRange, rangeClause, searchRegex, overdueClause, isOverdue } = require('../utils/format');
 
 /**
  * Everything the master dashboard and its side panels read.
@@ -48,8 +48,22 @@ function movementFilter(query) {
   if (query.type === 'issue') filter.returnedAt = null;
 
   if (query.q) {
-    const rx = new RegExp(String(query.q).trim(), 'i');
-    filter.$or = [{ productName: rx }, { assetTag: rx }, { userName: rx }, { locationName: rx }];
+    /**
+     * Escaped before it becomes a regex. Somebody searching for an asset tag
+     * or typing a stray bracket should get no results, not a crash — and a
+     * pattern built from raw input is a pattern somebody else controls.
+     */
+    const rx = searchRegex(query.q);
+    filter.$or = [
+      { productName: rx },
+      { assetTag: rx },
+      { userName: rx },
+      { locationName: rx },
+      // The reason is often the only part somebody remembers
+      { reason: rx },
+      { submitRemark: rx },
+      { acceptRemark: rx },
+    ];
   }
 
   return { range, filter };
@@ -62,7 +76,18 @@ function movementFilter(query) {
  * stay put when the filter bar changes — see movementFilter above.
  */
 async function headline() {
-  const [studioCount, totalItems, staffCount, outNow, pendingRequests, pendingBookings, valueAgg, addedThisMonth] =
+  const [
+    studioCount,
+    totalItems,
+    staffCount,
+    outNow,
+    pendingRequests,
+    pendingBookings,
+    valueAgg,
+    addedThisMonth,
+    pricedItems,
+    overdueItems,
+  ] =
     await Promise.all([
       Location.countDocuments({ status: 'active' }),
       Product.countDocuments({}),
@@ -74,6 +99,10 @@ async function headline() {
       Product.countDocuments({
         createdAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
       }),
+      // How many actually carry a price, so a zero total can explain itself
+      Product.countDocuments({ price: { $gt: 0 } }),
+      // Past their return time and still out
+      Product.countDocuments(overdueClause()),
     ]);
 
   return {
@@ -87,6 +116,9 @@ async function headline() {
     pendingTotal: pendingRequests + pendingBookings,
     totalValue: valueAgg[0] ? valueAgg[0].value : 0,
     addedThisMonth,
+    pricedItems,
+    unpricedItems: totalItems - pricedItems,
+    overdueItems,
   };
 }
 
@@ -263,7 +295,7 @@ const PANELS = {
     // Out with somebody who has asked to hand it back
     if (query.status === 'submitted') filter.returnRequestedAt = { $ne: null };
     if (query.q) {
-      const rx = new RegExp(String(query.q).trim(), 'i');
+      const rx = searchRegex(query.q);
       filter.$or = [{ name: rx }, { assetTag: rx }, { brand: rx }, { model: rx }];
     }
 
@@ -315,6 +347,7 @@ const PANELS = {
     });
 
     if (query.studio) items = items.filter((i) => String(i.location) === String(query.studio));
+    if (query.late === 'yes') items = items.filter((i) => isOverdue(i));
     if (query.q) {
       // The holder's name is searchable too — "who has what" is usually asked
       // from the person's end, not the item's
@@ -326,12 +359,30 @@ const PANELS = {
       );
     }
 
+    /**
+     * Late items first. This panel is what an admin opens when chasing
+     * something, and the ones past their time are the reason they opened it
+     * — burying them in a list sorted by when they went out would hide the
+     * only rows that need acting on.
+     */
+    items.sort((a, b) => Number(isOverdue(b)) - Number(isOverdue(a)));
+
     const { studioOptions } = await filterOptions();
     return {
       items,
+      overdueCount: items.filter((i) => isOverdue(i)).length,
       fields: [
         { type: 'search', name: 'q', label: 'Search', placeholder: 'Item, tag or who has it' },
         { type: 'select', name: 'studio', label: 'Studio', options: studioOptions },
+        {
+          type: 'select',
+          name: 'late',
+          label: 'Due back',
+          options: [
+            { value: '', label: 'Everything out' },
+            { value: 'yes', label: 'Overdue only' },
+          ],
+        },
       ],
     };
   },
@@ -390,7 +441,7 @@ const PANELS = {
           label: 'Transaction',
           options: [
             { value: '', label: 'All (issue / return)' },
-            { value: 'issue', label: 'Still out' },
+            { value: 'issue', label: 'Occupied' },
             { value: 'return', label: 'Returned' },
           ],
         },
@@ -415,7 +466,7 @@ const PANELS = {
     const filter = {};
     if (query.studio) filter.location = query.studio;
     if (query.status) filter.status = query.status;
-    if (query.q) filter.name = new RegExp(String(query.q).trim(), 'i');
+    if (query.q) filter.name = searchRegex(query.q);
 
     const [users, total] = await Promise.all([
       User.find(filter).sort({ name: 1 }).limit(PANEL_LIMIT).lean(),
@@ -459,15 +510,30 @@ const PANELS = {
   },
 
   async value(query) {
-    const filter = { price: { $gt: 0 } };
+    const filter = {};
+    // Only items that contribute to the total, unless the person is looking
+    // for the ones that do not
+    if (query.priced === 'no') filter.price = { $lte: 0 };
+    else filter.price = { $gt: 0 };
     if (query.studio) filter.location = query.studio;
     if (query.category) filter.category = query.category;
     if (query.q) {
-      const rx = new RegExp(String(query.q).trim(), 'i');
+      const rx = searchRegex(query.q);
       filter.$or = [{ name: rx }, { assetTag: rx }, { brand: rx }];
     }
 
-    const items = await Product.find(filter).sort({ price: -1 }).limit(PANEL_LIMIT).lean();
+    const items = await Product.find(filter)
+      .sort(query.priced === 'no' ? { name: 1 } : { price: -1 })
+      .limit(PANEL_LIMIT)
+      .lean();
+
+    // Counted separately, because the point of the panel when the total is
+    // zero is to show you which items are missing a price
+    const unpricedCount = await Product.countDocuments({
+      ...(query.studio ? { location: query.studio } : {}),
+      ...(query.category ? { category: query.category } : {}),
+      price: { $lte: 0 },
+    });
 
     const { byId } = await studioMap();
     items.forEach((i) => {
@@ -488,10 +554,21 @@ const PANELS = {
     return {
       items,
       totalValue: agg[0] ? agg[0].value : 0,
+      unpricedCount,
+      showingUnpriced: query.priced === 'no',
       fields: [
         { type: 'search', name: 'q', label: 'Search', placeholder: 'Name, tag or brand' },
         { type: 'select', name: 'studio', label: 'Studio', options: studioOptions },
         { type: 'select', name: 'category', label: 'Category', options: categoryOptions },
+        {
+          type: 'select',
+          name: 'priced',
+          label: 'Price',
+          options: [
+            { value: '', label: 'Items with a price' },
+            { value: 'no', label: 'Items missing a price' },
+          ],
+        },
       ],
     };
   },

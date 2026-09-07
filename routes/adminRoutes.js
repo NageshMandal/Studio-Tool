@@ -127,6 +127,9 @@ router.post('/returns/:id/decline', requireStudio, requests.declineReturn);
 // :id routes so "batch" is never read as a request id.
 router.post('/requests/batch/:batch/:action', requireStudio, requests.decideBatch);
 
+// Whatever the admin ticked — any requests, any people, one decision
+router.post('/requests/bulk', requireStudio, requests.decideMany);
+
 router.post('/requests/:id/approve', requireStudio, requests.approve);
 router.post('/requests/:id/reject', requireStudio, requests.reject);
 router.post('/requests/bookings/:id/approve', requireStudio, requests.approveBooking);

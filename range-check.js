@@ -6,6 +6,11 @@
 process.env.TIMEZONE = process.env.TIMEZONE || 'Asia/Kolkata';
 
 const {
+  defaultDueAt,
+  isOverdue,
+  overdueBy,
+  overdueClause,
+  searchRegex,
   resolveRange,
   rangeLabel,
   rangeClause,
@@ -112,6 +117,63 @@ check(
   '?q=lens&from=2026-08-02&to=2026-08-02'
 );
 check('empty filters are not passed as empty strings', rangeQuery({ staff: '', status: '' }, { from: '2026-08-01', to: '2026-08-01' }), '?from=2026-08-01&to=2026-08-01');
+
+console.log('\n--- Search patterns ---');
+/**
+ * Every search box in the app builds its pattern here. A regex assembled
+ * from raw typing is one the person typing controls — and a single "(" in
+ * any search box used to throw while building it and 500 the page.
+ */
+check('a plain word matches', searchRegex('mic').test('Boom Mic'), true);
+check('and is case-insensitive', searchRegex('MIC').test('boom mic'), true);
+check('an asset tag matches itself', searchRegex('PAT-0004').test('PAT-0004'), true);
+
+check('a lone bracket does not throw', typeof searchRegex('(') === 'object', true);
+check('and matches the character itself', searchRegex('(').test('a(b'), true);
+check('an unbalanced group is harmless', searchRegex('a(b').test('xxa(bxx'), true);
+
+check('regex characters are literal, not wildcards', searchRegex('.*').test('anything'), false);
+check('but do match themselves', searchRegex('.*').test('a .* b'), true);
+check('a dot is not "any character"', searchRegex('a.c').test('abc'), false);
+check('and matches a real dot', searchRegex('a.c').test('xa.cx'), true);
+
+check('an empty search is no search at all', searchRegex(''), null);
+check('and so is whitespace', searchRegex('   '), null);
+check('and so is nothing', searchRegex(undefined), null);
+
+console.log('\n--- Overdue ---');
+/**
+ * One rule, used by the staff nudge, the admin badges and the counts on
+ * both. Three ideas of "late" would put three different numbers on screen
+ * for the same question.
+ */
+const hoursAgo = (n) => new Date(Date.now() - n * 3600000);
+const hoursAhead = (n) => new Date(Date.now() + n * 3600000);
+
+check('past its time and still held', isOverdue({ dueAt: hoursAgo(3), assignedTo: 'u1' }), true);
+check('not yet due', isOverdue({ dueAt: hoursAhead(3), assignedTo: 'u1' }), false);
+check('no due date means never overdue', isOverdue({ dueAt: null, assignedTo: 'u1' }), false);
+check('already returned', isOverdue({ dueAt: hoursAgo(3), returnedAt: new Date() }), false);
+
+// The holder has done their part; the wait is now the admin's
+check('submitted, so the holder is not nagged',
+  isOverdue({ dueAt: hoursAgo(3), returnRequestedAt: new Date() }), false);
+check('the same on a movement row',
+  isOverdue({ dueAt: hoursAgo(3), submittedAt: new Date() }), false);
+
+check('how late it is, in words', overdueBy({ dueAt: hoursAgo(3), assignedTo: 'u1' }), '3h');
+check('and nothing when it is not late', overdueBy({ dueAt: hoursAhead(3) }), null);
+
+console.log('\n--- The badge count and the rows behind it agree ---');
+const clause = overdueClause();
+check('it only counts held items', clause.assignedTo.$ne, null);
+check('only ones past their time', clause.dueAt.$lt instanceof Date, true);
+check('and never a submitted one', clause.returnRequestedAt, null);
+
+console.log('\n--- The default return time ---');
+const due = defaultDueAt();
+check('is always in the future', due > new Date(), true);
+check('and within the next day and a half', due - new Date() < 36 * 3600000, true);
 
 console.log(fails ? `\n${fails} check(s) failed` : '\nDATE RANGES BEHAVE CORRECTLY');
 process.exit(fails ? 1 : 0);

@@ -1,7 +1,7 @@
 const UsageLog = require('../models/UsageLog');
 const Booking = require('../models/Booking');
 const { studioName } = require('./studios');
-const { todayKey } = require('../utils/format');
+const { todayKey, defaultDueAt } = require('../utils/format');
 
 /**
  * The single place where an item changes hands. Both the Telegram bot
@@ -9,7 +9,7 @@ const { todayKey } = require('../utils/format');
  */
 
 // Someone picks an item up.
-async function occupyProduct({ product, user, reason, source = 'telegram' }) {
+async function occupyProduct({ product, user, reason, source = 'telegram', dueAt }) {
   if (product.assignedTo) {
     const err = new Error('This item is already occupied');
     err.code = 'ALREADY_OCCUPIED';
@@ -44,11 +44,25 @@ async function occupyProduct({ product, user, reason, source = 'telegram' }) {
 
   const cleanReason = (reason || '').trim().slice(0, 120) || null;
 
+  /**
+   * Every loan gets a return time, even when nobody chose one. Without a
+   * default, an item taken in a hurry could never be overdue, and the one
+   * most likely to be forgotten would be the one nothing chased.
+   *
+   * A time in the past is ignored rather than accepted: an item that is
+   * overdue the instant it goes out helps nobody.
+   */
+  const asked = dueAt ? new Date(dueAt) : null;
+  const due = asked && !Number.isNaN(asked.getTime()) && asked > new Date()
+    ? asked
+    : defaultDueAt();
+
   const occupiedAt = new Date();
   product.assignedTo = user._id;
   product.status = 'assigned';
   product.occupiedAt = occupiedAt;
   product.occupyReason = cleanReason;
+  product.dueAt = due;
   await product.save();
 
   // The studio is taken from the ITEM, not from the person. They are the
@@ -57,6 +71,7 @@ async function occupyProduct({ product, user, reason, source = 'telegram' }) {
   return UsageLog.create({
     location: product.location,
     locationName: await studioName(product.location),
+    dueAt: due,
     product: product._id,
     productName: product.name,
     assetTag: product.assetTag,
@@ -182,6 +197,7 @@ async function acceptSubmission({ product, log, acceptedBy, remark, condition, c
   product.occupiedAt = null;
   product.occupyReason = null;
   product.returnRequestedAt = null;
+  product.dueAt = null;
   if (condition) product.condition = condition;
 
   await restoreToShelf(product, { claims });

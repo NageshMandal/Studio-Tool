@@ -193,10 +193,25 @@ const call = (url, init = {}) => {
   });
 };
 
+/**
+ * Arrays are appended as repeated keys, which is what a form with several
+ * checkboxes of the same name actually sends. Handing the array straight to
+ * URLSearchParams joins it with commas instead, and the test would be
+ * exercising a shape the app never receives.
+ */
+function encode(body) {
+  const params = new URLSearchParams();
+  Object.entries(body || {}).forEach(([key, value]) => {
+    if (Array.isArray(value)) value.forEach((v) => params.append(key, v));
+    else params.set(key, value);
+  });
+  return params.toString();
+}
+
 const post = (url, body, init = {}) =>
   call(url, {
     method: 'POST',
-    body: new URLSearchParams(body).toString(),
+    body: encode(body),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     ...init,
   });
@@ -345,6 +360,65 @@ setTimeout(async () => {
   const after = await res.text();
   check('deciding answers with the refreshed queue', res.status === 200 && after.includes('Item requests'), String(res.status));
   check('and reports what happened', after.includes('Booking confirmed'));
+
+  console.log('\nOverdue reaches the admin screens');
+  lastProductFilter = null;
+  await call('/admin/products?status=overdue', inStudio);
+  check('the register can be filtered to overdue', Boolean(lastProductFilter && lastProductFilter.dueAt),
+    JSON.stringify(lastProductFilter));
+  check('and it only counts items somebody still holds',
+    Boolean(lastProductFilter && lastProductFilter.assignedTo),
+    JSON.stringify(lastProductFilter && lastProductFilter.assignedTo));
+  check('never one already submitted',
+    lastProductFilter && lastProductFilter.returnRequestedAt === null,
+    String(lastProductFilter && lastProductFilter.returnRequestedAt));
+
+  const outPanel = await (await call('/admin/master/panel/out?late=yes', inStudio)).text();
+  check('the currently-out panel can show only the late ones', outPanel.includes('data-panel-filter'));
+  check('and offers that as a filter', outPanel.includes('Overdue only'));
+
+  console.log('\nOne state, one word');
+  /**
+   * An item somebody is holding was called "In progress" here, "Still out"
+   * on the usage log and "Out" on the register — three names for one state,
+   * in a system whose own vocabulary is "occupy".
+   */
+  page = await (await call('/admin/master', inStudio)).text();
+  check('the dashboard says Occupied', page.includes('>Occupied<'), 'no Occupied badge');
+  check('and no longer says In progress', !page.includes('In progress'));
+
+  for (const [label, url] of [['tracker', '/admin/tracker'], ['item register', '/admin/products'], ['usage log', '/admin/logs']]) {
+    const html = await (await call(url, inStudio)).text();
+    check(`the ${label} does not say "In progress" or "Still out"`,
+      !html.includes('In progress') && !html.includes('Still out'));
+  }
+
+  console.log('\nThe dashboard filter bar can be searched');
+  page = await (await call('/admin/master', inStudio)).text();
+  check('there is a box to type in', page.includes('name="q"'), 'no search input');
+
+  logQueries = [];
+  await call('/admin/master?q=cemera', inStudio);
+  let searched = logQueries.find((f) => f && f.$or);
+  check('typing reaches the query', Boolean(searched), JSON.stringify(logQueries[0]));
+  check('and looks across every field somebody might mean',
+    searched && searched.$or.length >= 5, searched && String(searched.$or.length));
+  check('including the asset tag', Boolean(searched && searched.$or.some((c) => c.assetTag)));
+  check('the person', Boolean(searched && searched.$or.some((c) => c.userName)));
+  check('and the reason', Boolean(searched && searched.$or.some((c) => c.reason)));
+
+  // A bracket in a search box used to throw while the pattern was built
+  for (const [label, term] of [['a lone bracket', '('], ['a wildcard', '.*'], ['a tag', 'PAT-0004']]) {
+    for (const [where, url] of [
+      ['master dashboard', '/admin/master?q='],
+      ['usage log', '/admin/logs?q='],
+      ['items panel', '/admin/master/panel/items?q='],
+      ['employees panel', '/admin/master/panel/employees?q='],
+    ]) {
+      res = await call(url + encodeURIComponent(term), inStudio);
+      check(`${label} is safe in the ${where} search`, res.status === 200, String(res.status));
+    }
+  }
 
   console.log('\nThe drawer can actually be closed');
   page = await (await call('/admin/master', inStudio)).text();
@@ -551,10 +625,62 @@ setTimeout(async () => {
     outcome.includes('Tripod') && outcome.includes('already with someone else'), outcome);
   approvals.approveRequest = realApprove;
 
+  console.log('\nDeciding a mixed selection, across people');
+  decided.length = 0;
+  approvals.approveRequest = async (id) => {
+    decided.push(String(id));
+    return { ok: true, message: 'Approved' };
+  };
+
+  // One from Amit's single request and both of Neha's batch — three items,
+  // two people, which is the case the bar exists for
+  res = await post(
+    '/admin/requests/bulk',
+    {
+      action: 'approve',
+      ids: ['000000000000000000000101', '000000000000000000000103', '000000000000000000000104'],
+    },
+    inStudio
+  );
+  let msg = decodeURIComponent(String(res.headers.get('location')));
+  check('all three were decided', decided.length === 3, String(decided.length));
+  check('and it says how many people were affected', msg.includes('across 2 people'), msg);
+
+  decided.length = 0;
+  res = await post('/admin/requests/bulk', { action: 'approve', ids: [] }, inStudio);
+  check('an empty selection is refused, not silently ignored',
+    decodeURIComponent(String(res.headers.get('location'))).includes('Pick at least one'),
+    res.headers.get('location'));
+  check('and nothing was decided', decided.length === 0, String(decided.length));
+
+  decided.length = 0;
+  res = await post('/admin/requests/bulk', { action: 'approve', ids: ['not-an-id', ''] }, inStudio);
+  check('rubbish ids are dropped rather than crashing', res.status === 302, String(res.status));
+  check('and decide nothing', decided.length === 0, String(decided.length));
+
+  /**
+   * The ids are re-read under the studio scope rather than trusted from the
+   * form, so pasting another studio's id into the page decides nothing.
+   */
+  let scopedFilter = null;
+  const realFind = AssignmentRequest.find;
+  AssignmentRequest.find = (filter) => { scopedFilter = filter; return realFind(filter); };
+  await post('/admin/requests/bulk', { action: 'approve', ids: ['000000000000000000000101'] }, inStudio);
+  check('the lookup is scoped to this studio', Boolean(scopedFilter && scopedFilter.location),
+    JSON.stringify(scopedFilter));
+  check('and only pending ones can be decided', scopedFilter && scopedFilter.status === 'pending',
+    scopedFilter && scopedFilter.status);
+  AssignmentRequest.find = realFind;
+
   res = await post('/admin/requests/batch/batch-none/approve', {}, inStudio);
   check('an empty batch is handled, not crashed',
     res.status === 302 && decodeURIComponent(String(res.headers.get('location'))).includes('already been dealt with'),
     `${res.status} ${res.headers.get('location')}`);
+
+  console.log('\nThe staff sidebar names the purchase request plainly');
+  const sidebar = require('fs').readFileSync('./views/partials/staff-sidebar.ejs', 'utf8');
+  check('the nav says Purchase Request', sidebar.includes('Purchase Request'));
+  check('and no longer says "Request an item"', !sidebar.includes('Request an item'));
 
   console.log('\nStudio hub — one page, no navigating away');
   r = await call('/admin/studios');

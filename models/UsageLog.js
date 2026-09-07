@@ -31,6 +31,9 @@ const usageLogSchema = new mongoose.Schema(
 
     occupiedAt: { type: Date, required: true, default: Date.now },
 
+    // What the holder said when they took it: when they would bring it back
+    dueAt: { type: Date, default: null },
+
     /**
      * Handing an item back takes two steps, and the item stays with the
      * person for both of them.

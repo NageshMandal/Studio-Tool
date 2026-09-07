@@ -12,7 +12,14 @@ const { createClaim, releaseForClaim, keepDespiteClaim } = require('../services/
 const notifications = require('../services/notifications');
 const procurement = require('./procurementController');
 const { notifyLocationAdmins } = require('../bot/notify');
-const { escapeHtml, todayKey, formatDay } = require('../utils/format');
+const {
+  escapeHtml,
+  todayKey,
+  formatDay,
+  formatWhen,
+  searchRegex,
+  defaultDueAt,
+} = require('../utils/format');
 const { STAFF_COOKIE } = require('../middleware/staffAuth');
 const { CATEGORIES } = require('../models/Product');
 
@@ -33,6 +40,19 @@ const mine = (req, extra = {}) => ({ ...extra, location: req.studioId });
  * Send the person back to the page they acted from (dashboard or inventory,
  * keeping any filters), with a flash message.
  */
+/**
+ * Reads the "return by" box. Anything missing, unreadable or already in the
+ * past falls back to the default rather than being rejected — a form that
+ * refuses to submit because somebody mistyped a time is a worse outcome than
+ * a sensible default they can change later.
+ */
+function readDueAt(value) {
+  if (!value) return defaultDueAt();
+  const when = new Date(value);
+  if (Number.isNaN(when.getTime()) || when <= new Date()) return defaultDueAt();
+  return when;
+}
+
 const back = (req, res, message) => {
   let target = '/staff';
   try {
@@ -171,12 +191,13 @@ exports.inventory = async (req, res, next) => {
     const { q, category, status } = req.query;
 
     const filter = mine(req);
-    if (q) {
+    const rx = searchRegex(q);
+    if (rx) {
       filter.$or = [
-        { name: new RegExp(q, 'i') },
-        { assetTag: new RegExp(q, 'i') },
-        { brand: new RegExp(q, 'i') },
-        { serialNumber: new RegExp(q, 'i') },
+        { name: rx },
+        { assetTag: rx },
+        { brand: rx },
+        { serialNumber: rx },
       ];
     }
     if (category) filter.category = category;
@@ -369,8 +390,13 @@ exports.occupy = async (req, res, next) => {
 
     if (user.accountType === 'power') {
       try {
-        await occupyProduct({ product, user, reason, source: 'web' });
-        return back(req, res, `${product.name} is now with you`);
+        const dueAt = readDueAt(req.body.dueAt);
+        await occupyProduct({ product, user, reason, source: 'web', dueAt });
+        return back(
+          req,
+          res,
+          `${product.name} is now with you — please return it by ${formatWhen(dueAt)}`
+        );
       } catch (err) {
         return back(req, res, err.message);
       }
@@ -403,6 +429,7 @@ exports.occupy = async (req, res, next) => {
       user: user._id,
       userName: user.name,
       reason: reason || null,
+      dueAt: readDueAt(req.body.dueAt),
     });
 
     // Only the admins of this studio are told
@@ -510,6 +537,7 @@ exports.requestMany = async (req, res, next) => {
     const products = await Product.find(mine(req, { _id: { $in: ids } }));
     if (products.length === 0) return back(req, res, 'None of those items are at your studio');
 
+    const dueAt = readDueAt(req.body.dueAt);
     const isPower = user.accountType === 'power';
     const batch = isPower ? null : new mongoose.Types.ObjectId().toString();
 
@@ -520,7 +548,7 @@ exports.requestMany = async (req, res, next) => {
     for (const product of products) {
       if (isPower) {
         try {
-          await occupyProduct({ product, user, reason, source: 'web' });
+          await occupyProduct({ product, user, reason, source: 'web', dueAt });
           taken.push(product.name);
         } catch (err) {
           skipped.push(`${product.name} (${err.message})`);
@@ -562,6 +590,7 @@ exports.requestMany = async (req, res, next) => {
         user: user._id,
         userName: user.name,
         reason: reason || null,
+        dueAt,
         batch,
       });
       requested.push(product.name);

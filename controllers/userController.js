@@ -4,6 +4,7 @@ const AssignmentRequest = require('../models/AssignmentRequest');
 const NextClaim = require('../models/NextClaim');
 const ProcurementRequest = require('../models/ProcurementRequest');
 const { releaseProduct } = require('../services/occupancy');
+const { searchRegex } = require('../utils/format');
 
 /**
  * Staff, always seen through one studio.
@@ -67,11 +68,12 @@ exports.list = async (req, res, next) => {
     const { q, department, status, staffRole } = req.query;
 
     const filter = req.scope.filter();
-    if (q) {
+    const rx = searchRegex(q);
+    if (rx) {
       filter.$or = [
-        { name: new RegExp(q, 'i') },
-        { email: new RegExp(q, 'i') },
-        { employeeId: new RegExp(q, 'i') },
+        { name: rx },
+        { email: rx },
+        { employeeId: rx },
       ];
     }
     if (department) filter.department = department;

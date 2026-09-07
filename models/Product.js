@@ -77,6 +77,16 @@ const productSchema = new mongoose.Schema(
      */
     returnRequestedAt: { type: Date, default: null },
 
+    /**
+     * When the current holder said they would bring it back. Set as the item
+     * goes out, cleared when it is accepted back.
+     *
+     * Stored on the item as well as on the movement so "what is overdue" is
+     * one query on the register rather than a join through the log for every
+     * screen that needs to show it — and every screen does.
+     */
+    dueAt: { type: Date, default: null },
+
     // Where inside the studio it is kept — shelf, rack, cupboard
     storageArea: { type: String, trim: true, default: 'Main store' },
 

@@ -363,7 +363,7 @@ exports.exportCsv = async (req, res, next) => {
     lines.push('Summary');
     lines.push(`Movements,${report.summary.movements}`);
     lines.push(`Returns,${report.summary.returns}`);
-    lines.push(`Still out at month end,${report.summary.stillOut}`);
+    lines.push(`Occupied at month end,${report.summary.stillOut}`);
     lines.push(`Total hours out,${report.summary.totalHours}`);
     lines.push(`Average hours per movement,${report.summary.avgHours}`);
     lines.push(`Distinct items used,${report.summary.distinctItems}`);
@@ -391,7 +391,7 @@ exports.exportCsv = async (req, res, next) => {
           l.occupiedAt ? new Date(l.occupiedAt).toISOString() : '',
           l.submittedAt ? new Date(l.submittedAt).toISOString() : '',
           l.submitRemark || '',
-          l.returnedAt ? new Date(l.returnedAt).toISOString() : (l.submittedAt ? 'awaiting the admin' : 'still out'),
+          l.returnedAt ? new Date(l.returnedAt).toISOString() : (l.submittedAt ? 'awaiting the admin' : 'still occupied'),
           l.acceptedBy || '',
           l.acceptRemark || '',
           l.acceptCondition || '',

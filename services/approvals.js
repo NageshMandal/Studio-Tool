@@ -83,7 +83,15 @@ async function approveRequest(requestId, decidedBy, scopeLocation = null) {
   }
 
   // Same path as a bot occupy, so the usage log never misses a movement
-  await occupyProduct({ product, user, reason: request.reason, source: 'admin' });
+  // The return time the requester gave carries onto the loan, so approving
+  // does not quietly reset it to the default
+  await occupyProduct({
+    product,
+    user,
+    reason: request.reason,
+    source: 'admin',
+    dueAt: request.dueAt,
+  });
 
   request.status = 'approved';
   request.decidedAt = new Date();

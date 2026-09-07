@@ -1266,3 +1266,59 @@ body.drawer-open { overflow: hidden; }
 .panel-filters input, .panel-filters select { padding: 7px 10px; font-size: 13px; }
 .panel-filters-search { flex-basis: 100%; }
 .panel-filters-actions { display: flex; gap: 6px; }
+
+/* The two return dates, wherever a movement is listed. The remark sits under
+   its own date, so it is read next to the moment it was made. */
+.return-cell { min-width: 130px; }
+.return-cell .row-sub { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The free-text search leads the master dashboard's filter bar: it takes the
+   whole first row, so the dropdowns wrap beneath rather than squeezing it. */
+.filters .field-wide { flex-basis: 100%; min-width: 100%; }
+
+/* Draws the eye to a gap in the data — an unpriced item, a missing total —
+   without dressing it up as an error, because it is not one. */
+.warn { color: var(--amber); font-weight: 600; }
+
+/* An overdue loan. Loud where the person can act on it — their own item card
+   — and a quieter marker in admin lists, which are read in bulk. */
+.danger { color: var(--red); font-weight: 600; }
+
+.item-card.is-overdue { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
+.overdue-nudge { margin: 0 0 10px; font-size: 12.5px; }
+
+.panel-row.is-overdue { background: var(--red-soft); border-radius: var(--r-sm); padding-left: 8px; padding-right: 8px; }
+
+/* The "return by" box sits under the reason on a take/ask form */
+.take-form { display: flex; flex-direction: column; gap: 8px; }
+.due-field { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+.due-field span { flex-shrink: 0; font-weight: 600; }
+.due-field input { padding: 6px 8px; font-size: 12.5px; }
+
+/* Deciding several requests at once */
+.pick-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  margin-bottom: 18px;
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+  border: 1px solid var(--blue);
+  box-shadow: var(--shadow);
+}
+.pick-count { font-size: 13.5px; color: var(--muted); }
+.pick-count b { font-size: 20px; color: var(--text); }
+.pick-bar .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.pick-tick, .pick-all { width: 16px; height: 16px; accent-color: var(--blue); cursor: pointer; flex-shrink: 0; }
+.request-pick { display: flex; align-items: flex-start; gap: 10px; }
+.request-pick .pick-tick { margin-top: 3px; }
+.request-card.is-picked { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+
+.pick-all-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.pick-all-row label { display: flex; align-items: center; gap: 7px; cursor: pointer; font-weight: 600; color: var(--text); }
+.pick-all-label { display: flex; align-items: center; gap: 9px; cursor: pointer; }

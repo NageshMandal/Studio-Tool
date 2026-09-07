@@ -32,7 +32,7 @@
       <span>Status</span>
       <select name="status">
         <option value="">All status</option>
-        <option value="out" <%= query.status === 'out' ? 'selected' : '' %>>Still out</option>
+        <option value="out" <%= query.status === 'out' ? 'selected' : '' %>>Occupied</option>
         <option value="returned" <%= query.status === 'returned' ? 'selected' : '' %>>Returned</option>
       </select>
     </label>
@@ -51,7 +51,7 @@
     <div class="table-wrap">
       <table class="table">
         <thead>
-          <tr><th>Date</th><th>Item</th><th>Assigned to</th><th>Reason</th><th>Duration</th><th>Status</th></tr>
+          <tr><th>Taken</th><th>Item</th><th>Assigned to</th><th>Reason</th><th>Submitted</th><th>Accepted</th><th>Duration</th><th>Status</th></tr>
         </thead>
         <tbody>
           <% rows.forEach(function (r) { %>
@@ -68,12 +68,19 @@
                 </span>
               </td>
               <td><%= r.reason || '—' %></td>
+              <%- include('partials/return-cells', { log: r }) %>
               <td><%= r.durationMinutes != null ? formatDuration(r.durationMinutes) : formatSince(r.occupiedAt) %></td>
               <td>
                 <% if (r.returnedAt) { %>
-                  <span class="badge badge-green">Completed</span>
+                  <span class="badge badge-green">Returned</span>
+                <% } else if (r.submittedAt) { %>
+                  <span class="badge badge-purple">Awaiting approval</span>
                 <% } else { %>
-                  <span class="badge badge-amber">In progress</span>
+                  <% if (isOverdue(r)) { %>
+                    <span class="badge badge-red">Overdue <%= overdueBy(r) %></span>
+                  <% } else { %>
+                    <span class="badge badge-amber">Occupied</span>
+                  <% } %>
                 <% } %>
               </td>
             </tr>

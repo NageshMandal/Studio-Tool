@@ -9,7 +9,15 @@
 %>
   <div class="request-card">
     <div class="request-head">
-      <div>
+      <div class="request-pick">
+        <%
+          /* Tied to the bar's form by the `form` attribute rather than by
+             nesting: each card already holds its own Approve and Decline
+             forms, and forms cannot be nested. */
+        %>
+        <input class="pick-tick" type="checkbox" name="ids" value="<%= r._id %>"
+               form="bulkDecide" data-user="<%= r.userName %>"
+               aria-label="Select <%= r.productName %> for <%= r.userName %>" />
         <h3><%= r.productName %></h3>
         <div class="request-meta">
           <span class="asset-tag"><%= r.assetTag %></span>
@@ -42,6 +50,31 @@
 <%
   }
 %>
+
+<%
+  /**
+   * Decide any number of requests at once, from any number of people.
+   *
+   * The batch buttons further down handle one person's basket; this handles
+   * a morning's queue. Both go through the same per-item calls, so a request
+   * somebody else has already taken fails on its own terms either way.
+   */
+%>
+<form method="POST" action="/admin/requests/bulk" id="bulkDecide" class="panel pick-bar" hidden>
+  <div class="pick-count">
+    <b id="pickCount">0</b> selected<span id="pickPeople"></span>
+  </div>
+  <input type="hidden" name="note" />
+  <div class="actions">
+    <button class="btn btn-ok" type="submit" name="action" value="approve">
+      <%- icon('check', 15) %> Approve selected
+    </button>
+    <button class="btn btn-danger" type="submit" name="action" value="reject">
+      Decline selected
+    </button>
+    <button class="btn btn-ghost" type="button" id="pickClear">Clear</button>
+  </div>
+</form>
 
 <section class="panel">
   <div class="panel-head">
@@ -144,6 +177,14 @@
       <div class="empty"><p>No equipment requests are waiting.</p></div>
     <% } else { %>
 
+      <p class="hint pick-all-row">
+        <label>
+          <input type="checkbox" class="pick-all" data-scope="all" />
+          Select all <%= pending.length %>
+        </label>
+        — tick any of them, from any number of people, and decide them together.
+      </p>
+
       <%
         /* Batches first: somebody asking for a camera, a lens and a tripod
            for one shoot is one decision most of the time, and five separate
@@ -153,7 +194,10 @@
         <div class="batch">
           <div class="batch-head">
             <div>
-              <h3><%= b.userName %> asked for <%= b.items.length %> items together</h3>
+              <label class="pick-all-label">
+                <input type="checkbox" class="pick-all" data-scope="<%= b.batch %>" />
+                <h3><%= b.userName %> asked for <%= b.items.length %> items together</h3>
+              </label>
               <p class="hint">
                 <%= formatWhen(b.createdAt) %><%= b.reason ? ' · ' + b.reason : '' %>
               </p>
@@ -177,7 +221,9 @@
             rest is fine, and the batch simply shrinks.
           </p>
 
-          <% b.items.forEach(function (r) { requestCard(r); }); %>
+          <div data-batch="<%= b.batch %>">
+            <% b.items.forEach(function (r) { requestCard(r); }); %>
+          </div>
         </div>
       <% }); %>
 
@@ -218,7 +264,7 @@
 
           <% if (b.awaitingReturn) { %>
             <div class="alert alert-info" style="margin: 12px 0 0">
-              The item is still out. The holder has been asked to submit it.
+              The item is occupied. The holder has been asked to submit it.
             </div>
           <% } %>
           <% if (b.dayTaken) { %>

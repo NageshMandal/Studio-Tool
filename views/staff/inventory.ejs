@@ -77,6 +77,10 @@
     <input type="text" name="reason" maxlength="120" required
            placeholder="One reason for all of them" />
   </label>
+  <label class="field">
+    <span>Return by</span>
+    <input type="datetime-local" name="dueAt" value="<%= dueDefault %>" />
+  </label>
   <div class="actions">
     <button class="btn btn-primary" type="submit">
       <%= user.accountType === 'power' ? 'Take selected' : 'Ask for selected' %>
@@ -100,7 +104,7 @@
         No equipment here fits those filters. If your studio simply does not own
         what you need, you can ask for it.
       </p>
-      <a class="btn btn-primary" href="/staff/purchase-requests">Request an item</a>
+      <a class="btn btn-primary" href="/staff/purchase-requests">Purchase Request</a>
     </div>
   </div>
 <% } %>
@@ -120,8 +124,9 @@
         // same test the server applies, so a tick is never a false promise
         var selectable = !mine && !pending && !p.assignedTo && !blocked(p) &&
           !(booked && String(booked.user) !== String(user._id));
+        var overdue = mine && isOverdue(p);
       %>
-      <div class="item-card">
+      <div class="item-card <%= overdue ? 'is-overdue' : '' %>">
         <div class="top">
           <% if (selectable) { %>
             <input class="bulk-tick" type="checkbox" name="items" value="<%= p._id %>"
@@ -150,6 +155,19 @@
             <span class="badge badge-grey"><%= claim.userName %> next</span>
           <% } %>
         </div>
+
+        <% if (mine && overdue) { %>
+          <%
+            /* The nudge only appears on items this person actually holds and
+               has not yet submitted. Telling somebody an item is late when
+               they have already handed it back would be blaming them for a
+               queue they are not in. */
+          %>
+          <div class="alert alert-error overdue-nudge">
+            <b>Overdue by <%= overdueBy(p) %>.</b>
+            Please submit it — it was due <%= formatWhen(p.dueAt) %>.
+          </div>
+        <% } %>
 
         <% if (mine && p.returnRequestedAt) { %>
           <%
@@ -182,9 +200,18 @@
           </form>
 
         <% } else if (!p.assignedTo && !blocked(p)) { %>
-          <form method="POST" action="/staff/occupy/<%= p._id %>" class="inline-form">
+          <form method="POST" action="/staff/occupy/<%= p._id %>" class="take-form">
             <input type="text" name="reason" placeholder="What is it for?" maxlength="120" required />
-            <button class="btn btn-primary btn-sm" type="submit">
+            <%
+              /* A return time on every loan. Pre-filled so the common case is
+                 still one line and a button, but changeable when a shoot runs
+                 longer — it is what makes an item overdue later. */
+            %>
+            <label class="due-field">
+              <span>Return by</span>
+              <input type="datetime-local" name="dueAt" value="<%= dueDefault %>" />
+            </label>
+            <button class="btn btn-primary btn-sm btn-block" type="submit">
               <%= user.accountType === 'power' ? 'Take' : 'Ask' %>
             </button>
           </form>

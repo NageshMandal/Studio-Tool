@@ -26,6 +26,11 @@
       <span>Status</span>
       <select name="status">
         <option value="">All status</option>
+        <%
+          /* Offered alongside the real statuses because it is what an admin
+             actually wants to filter for, even though nothing stores it. */
+        %>
+        <option value="overdue" <%= query.status === 'overdue' ? 'selected' : '' %>>overdue</option>
         <% statuses.forEach(function (s) { %>
           <option value="<%= s %>" <%= query.status === s ? 'selected' : '' %>><%= s %></option>
         <% }); %>
@@ -80,8 +85,10 @@
                 <% if (p.assignedTo) { %>
                   <% if (p.returnRequestedAt) { %>
                     <span class="badge badge-purple">Submitted, awaiting you</span>
+                  <% } else if (isOverdue(p)) { %>
+                    <span class="badge badge-red">Overdue <%= overdueBy(p) %></span>
                   <% } else { %>
-                    <span class="badge badge-amber">Out</span>
+                    <span class="badge badge-amber">Occupied</span>
                   <% } %>
                 <% } else if (p.status === 'maintenance') { %>
                   <span class="badge badge-red">Maintenance</span>

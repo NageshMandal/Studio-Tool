@@ -46,7 +46,7 @@
       </div>
       <div class="report-figure">
         <span>Returns</span><b><%= report.summary.returns %></b>
-        <small><%= report.summary.stillOut %> still out</small>
+        <small><%= report.summary.stillOut %> still occupied</small>
       </div>
       <div class="report-figure">
         <span>Hours in use</span><b><%= report.summary.totalHours %></b>
@@ -181,7 +181,7 @@
     <div class="table-wrap">
       <table class="table">
         <thead>
-          <tr><th>Asset tag</th><th>Item</th><th>Person</th><th>Taken</th><th>Returned</th><th>Duration</th><th>Reason</th></tr>
+          <tr><th>Asset tag</th><th>Item</th><th>Person</th><th>Taken</th><th>Submitted</th><th>Accepted</th><th>Duration</th><th>Reason</th></tr>
         </thead>
         <tbody>
           <% report.logs.forEach(function (l) { %>
@@ -190,10 +190,7 @@
               <td><span class="row-title"><%= l.productName %></span></td>
               <td><%= l.userName %></td>
               <td><%= formatWhen(l.occupiedAt) %></td>
-              <td>
-                <% if (l.returnedAt) { %><%= formatWhen(l.returnedAt) %>
-                <% } else { %><span class="badge badge-amber">Still out</span><% } %>
-              </td>
+              <%- include('../partials/return-cells', { log: l }) %>
               <td><%= l.durationMinutes != null ? formatDuration(l.durationMinutes) : formatSince(l.occupiedAt) %></td>
               <td><%= l.reason || '—' %></td>
             </tr>

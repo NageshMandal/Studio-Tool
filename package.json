@@ -8,7 +8,9 @@
     "dev": "nodemon server.js",
     "setup": "node scripts/setup.js",
     "setup:demo": "node scripts/setup.js --demo",
-    "check:db": "node scripts/check-db.js"
+    "check:db": "node scripts/check-db.js",
+    "check:prices": "node scripts/check-prices.js",
+    "fix:prices": "node scripts/fix-prices.js"
   },
   "keywords": [
     "express",

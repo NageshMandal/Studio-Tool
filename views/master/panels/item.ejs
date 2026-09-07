@@ -37,7 +37,13 @@
       <li class="panel-row">
         <span class="panel-row-main">
           <b><%= h.userName %></b>
-          <span class="panel-row-sub"><%= formatWhen(h.occupiedAt) %><%= h.reason ? ' · ' + h.reason : '' %></span>
+          <span class="panel-row-sub">Taken <%= formatWhen(h.occupiedAt) %><%= h.reason ? ' · ' + h.reason : '' %></span>
+          <% if (h.submittedAt) { %>
+            <span class="panel-row-sub">Submitted <%= formatWhen(h.submittedAt) %></span>
+          <% } %>
+          <% if (h.returnedAt) { %>
+            <span class="panel-row-sub">Accepted <%= formatWhen(h.returnedAt) %></span>
+          <% } %>
           <%
             /* Both accounts of how the item came back, side by side. This is
                the record the two-step return exists to produce, so the item's
@@ -56,7 +62,11 @@
         </span>
         <span class="panel-row-actions">
           <% if (!h.returnedAt && !h.submittedAt) { %>
-            <span class="badge badge-amber">Still out</span>
+            <% if (isOverdue(h)) { %>
+      <span class="badge badge-red">Overdue <%= overdueBy(h) %></span>
+    <% } else { %>
+      <span class="badge badge-amber">Occupied</span>
+    <% } %>
           <% } else if (!h.returnedAt) { %>
             <span class="badge badge-purple">Submitted, awaiting approval</span>
           <% } else { %>

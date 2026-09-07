@@ -4,7 +4,7 @@ const User = require('../models/User');
 const { CATEGORIES } = require('../models/Product');
 const { pushNotification } = require('../services/notifications');
 const { notifyLocationAdmins } = require('../bot/notify');
-const { escapeHtml } = require('../utils/format');
+const { escapeHtml, searchRegex } = require('../utils/format');
 
 /**
  * Staff purchase requests — "we don't have this, can we get one?"
@@ -33,11 +33,12 @@ exports.list = async (req, res, next) => {
     const filter = req.scope.filter();
     if (status) filter.status = status;
     if (urgency) filter.urgency = urgency;
-    if (q) {
+    const rx = searchRegex(q);
+    if (rx) {
       filter.$or = [
-        { itemName: new RegExp(q, 'i') },
-        { reference: new RegExp(q, 'i') },
-        { requesterName: new RegExp(q, 'i') },
+        { itemName: rx },
+        { reference: rx },
+        { requesterName: rx },
       ];
     }
 

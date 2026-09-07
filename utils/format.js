@@ -322,6 +322,94 @@ function rangeQuery(query, range, extra = {}) {
   return qs ? `?${qs}` : '';
 }
 
+/**
+ * A case-insensitive "contains" pattern built safely from whatever somebody
+ * typed into a search box.
+ *
+ * Every character with a meaning in a regex is escaped first. Without this,
+ * searching for an asset tag with a bracket in it, or a lone "(", throws
+ * while building the pattern and the page 500s — and a pattern assembled
+ * from raw input is a pattern the person typing controls.
+ *
+ * Returns null for an empty search, so callers can skip the clause entirely.
+ */
+function searchRegex(term) {
+  const text = String(term == null ? '' : term).trim();
+  if (!text) return null;
+  return new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+}
+
+/* ---- Due dates and overdue items ---------------------------------- *
+ * One definition of "overdue", used by the staff screens, the admin
+ * screens and the counts on both. Three separate ideas of when an item is
+ * late would show three different numbers for the same question.
+ */
+
+/**
+ * The default "return by" offered when somebody takes an item out: 6pm
+ * today, or 6pm tomorrow if it is already past that.
+ *
+ * A default is offered rather than demanded because the alternative — a
+ * required field on every request — makes the common case slower for the
+ * sake of the rare one. It can always be changed before submitting.
+ */
+function defaultDueAt(now = new Date()) {
+  const local = new Date(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(now) + 'T00:00:00Z'
+  );
+
+  const sixPm = new Date(local.getTime() + 18 * 3600000);
+  const asUtc = new Date(sixPm.getTime() - tzOffsetMinutes(now) * 60000);
+  return asUtc > now ? asUtc : new Date(asUtc.getTime() + 86400000);
+}
+
+/** The studio timezone's offset from UTC, in minutes, right now. */
+function tzOffsetMinutes(when = new Date()) {
+  const asLocal = new Date(
+    new Intl.DateTimeFormat('sv-SE', {
+      timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).format(when).replace(' ', 'T') + 'Z'
+  );
+  return Math.round((asLocal - when) / 60000);
+}
+
+/**
+ * Is this loan past its return time?
+ *
+ * Takes anything carrying `dueAt` — a product or a movement. A loan that has
+ * been submitted is not counted: the holder has done their part and it is
+ * the admin who is now sitting on it, so nagging them about it would be
+ * blaming the wrong person.
+ */
+function isOverdue(row, now = new Date()) {
+  if (!row || !row.dueAt) return false;
+  if (row.returnedAt) return false;
+  if (row.returnRequestedAt || row.submittedAt) return false;
+  return new Date(row.dueAt) < now;
+}
+
+/** "2 hours", "3 days" — how far past the return time, for a nudge. */
+function overdueBy(row, now = new Date()) {
+  if (!isOverdue(row, now)) return null;
+  return formatDuration(Math.round((now - new Date(row.dueAt)) / 60000));
+}
+
+/**
+ * The mongo clause for "overdue right now", matching isOverdue exactly.
+ * Kept beside it so the count on a badge and the rows behind it can never
+ * disagree — which is the classic way a number like this loses trust.
+ */
+function overdueClause(now = new Date()) {
+  return {
+    dueAt: { $ne: null, $lt: now },
+    assignedTo: { $ne: null },
+    returnRequestedAt: null,
+  };
+}
+
 // Telegram messages are sent with parse_mode HTML
 function escapeHtml(text) {
   return String(text == null ? '' : text)
@@ -392,6 +480,11 @@ module.exports = {
   rangeClause,
   shiftRange,
   rangeQuery,
+  searchRegex,
+  defaultDueAt,
+  isOverdue,
+  overdueBy,
+  overdueClause,
   escapeHtml,
   dateKeyOf,
   todayKey,

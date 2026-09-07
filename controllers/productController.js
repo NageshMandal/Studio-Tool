@@ -5,6 +5,7 @@ const AssignmentRequest = require('../models/AssignmentRequest');
 const NextClaim = require('../models/NextClaim');
 const { syncAssignment, releaseProduct, occupyProduct } = require('../services/occupancy');
 const { CATEGORIES } = require('../models/Product');
+const { searchRegex, overdueClause } = require('../utils/format');
 
 /**
  * The item register, always seen through one studio.
@@ -42,16 +43,23 @@ exports.list = async (req, res, next) => {
     const { q, category, status, condition } = req.query;
 
     const filter = req.scope.filter();
-    if (q) {
+    const rx = searchRegex(q);
+    if (rx) {
       filter.$or = [
-        { name: new RegExp(q, 'i') },
-        { assetTag: new RegExp(q, 'i') },
-        { brand: new RegExp(q, 'i') },
-        { serialNumber: new RegExp(q, 'i') },
+        { name: rx },
+        { assetTag: rx },
+        { brand: rx },
+        { serialNumber: rx },
       ];
     }
     if (category) filter.category = category;
-    if (status) filter.status = status;
+    /**
+     * 'overdue' is not a stored status — it is a question about the due
+     * date. Handled here rather than added to the enum, because an item
+     * being late is a fact about time passing, not a state anybody set.
+     */
+    if (status === 'overdue') Object.assign(filter, overdueClause());
+    else if (status) filter.status = status;
     if (condition) filter.condition = condition;
 
     const products = await Product.find(filter)

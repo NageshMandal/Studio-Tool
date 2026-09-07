@@ -1,11 +1,30 @@
 <%- include('./_filters', { panel: 'value', fields: fields, query: query }) %>
 
-<p class="panel-lede">
-  <%= formatMoney(totalValue) %> across the register, most valuable first.
-</p>
+<% if (showingUnpriced) { %>
+  <p class="panel-lede">
+    <%= items.length %> item<%= items.length === 1 ? '' : 's' %> with no price recorded.
+    These add nothing to the total until a price is set on each one.
+  </p>
+<% } else { %>
+  <p class="panel-lede">
+    <%= formatMoney(totalValue) %> across the register, most valuable first.
+    <% if (unpricedCount > 0) { %>
+      <br />
+      <span class="warn"><%= unpricedCount %> item<%= unpricedCount === 1 ? '' : 's' %> have no price</span>
+      and are not counted — switch the Price filter above to find them.
+    <% } %>
+  </p>
+<% } %>
 
 <% if (items.length === 0) { %>
-  <p class="panel-empty">No item has a price recorded yet.</p>
+  <p class="panel-empty">
+    <% if (showingUnpriced) { %>
+      Every item has a price. Nothing missing.
+    <% } else { %>
+      No item has a price recorded yet, so the total is zero.
+      Switch the Price filter above to see which items need one.
+    <% } %>
+  </p>
 <% } else { %>
   <ul class="panel-list">
     <% items.forEach(function (i) { %>
@@ -18,7 +37,11 @@
           </span>
         </span>
         <span class="panel-row-actions">
-          <b><%= formatMoney(i.price) %></b>
+          <% if (i.price > 0) { %>
+            <b><%= formatMoney(i.price) %></b>
+          <% } else { %>
+            <span class="badge badge-grey">No price</span>
+          <% } %>
           <button class="btn btn-ghost btn-sm" type="button"
                   data-panel="item" data-params="id=<%= i._id %>"
                   data-title="<%= i.name %>">View</button>

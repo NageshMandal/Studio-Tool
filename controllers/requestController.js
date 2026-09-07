@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const AssignmentRequest = require('../models/AssignmentRequest');
 const UsageLog = require('../models/UsageLog');
 const Booking = require('../models/Booking');
@@ -151,12 +152,54 @@ exports.list = async (req, res, next) => {
 };
 
 /**
- * POST /admin/requests/batch/:batch/:action — decide a whole batch at once.
+ * Decides a set of requests, one at a time.
  *
- * It is a loop over the same per-item calls the individual buttons use, not
- * a separate bulk path. That matters: an item that has since been taken by
- * somebody else still fails on its own terms, and the admin is told which
- * ones did rather than being shown one blanket success.
+ * Shared by the batch buttons and the tick-a-few-and-act bar, so a bulk
+ * decision behaves identically however it was started. It is a loop over the
+ * same per-item calls the individual buttons use, not a separate bulk path —
+ * which matters, because an item somebody else has taken in the meantime
+ * still has to fail on its own terms.
+ *
+ * Failures are named rather than counted. "3 approved, 2 failed" tells an
+ * admin nothing they can act on; naming the two tells them exactly what to
+ * go and look at.
+ */
+async function decideRequests(req, res, requests, action) {
+  if (requests.length === 0) {
+    return res.redirect(backTo('Those requests have already been dealt with'));
+  }
+
+  const done = [];
+  const failed = [];
+
+  for (const request of requests) {
+    const result =
+      action === 'approve'
+        ? await approvals.approveRequest(request._id, whoIs(req), req.scope.activeId)
+        : await approvals.rejectRequest(request._id, whoIs(req), req.body.note, req.scope.activeId);
+
+    if (result.ok) done.push(request.productName);
+    else failed.push(`${request.productName} (${result.message})`);
+  }
+
+  // How many people were affected, because a bulk decision across several
+  // staff is a different thing from one person's basket
+  const people = new Set(requests.map((r) => r.userName)).size;
+
+  const verb = action === 'approve' ? 'approved' : 'declined';
+  const parts = [];
+  if (done.length) {
+    parts.push(
+      `${done.length} ${verb}` + (people > 1 ? ` across ${people} people` : '')
+    );
+  }
+  if (failed.length) parts.push(`${failed.length} could not be: ${failed.join(', ')}`);
+
+  return res.redirect(backTo(parts.join(' · ')));
+}
+
+/**
+ * POST /admin/requests/batch/:batch/:action — decide one person's batch.
  */
 exports.decideBatch = async (req, res, next) => {
   try {
@@ -167,27 +210,42 @@ exports.decideBatch = async (req, res, next) => {
       status: 'pending',
     }).lean();
 
-    if (requests.length === 0) return res.redirect(backTo('Those requests have already been dealt with'));
+    return decideRequests(req, res, requests, action);
+  } catch (err) {
+    return next(err);
+  }
+};
 
-    const done = [];
-    const failed = [];
+/**
+ * POST /admin/requests/bulk — decide whatever the admin ticked.
+ *
+ * The selection is free-form: any requests on the page, from any number of
+ * people and any number of batches. A morning's queue is usually decided in
+ * one sweep rather than one person at a time, and making that take twenty
+ * clicks was the thing worth fixing.
+ *
+ * The ids are re-read from the database under the studio scope rather than
+ * trusted from the form, so a request from another studio cannot be decided
+ * by pasting its id into the page.
+ */
+exports.decideMany = async (req, res, next) => {
+  try {
+    const action = req.body.action === 'approve' ? 'approve' : 'reject';
 
-    for (const request of requests) {
-      const result =
-        action === 'approve'
-          ? await approvals.approveRequest(request._id, whoIs(req), req.scope.activeId)
-          : await approvals.rejectRequest(request._id, whoIs(req), req.body.note, req.scope.activeId);
+    const ids = []
+      .concat(req.body.ids || [])
+      .map((id) => String(id))
+      .filter((id) => mongoose.isValidObjectId(id));
 
-      if (result.ok) done.push(request.productName);
-      else failed.push(`${request.productName} (${result.message})`);
-    }
+    if (ids.length === 0) return res.redirect(backTo('Pick at least one request first'));
 
-    const verb = action === 'approve' ? 'approved' : 'declined';
-    const parts = [];
-    if (done.length) parts.push(`${done.length} ${verb}`);
-    if (failed.length) parts.push(`${failed.length} could not be: ${failed.join(', ')}`);
+    const requests = await AssignmentRequest.find({
+      ...req.scope.filter(),
+      _id: { $in: ids },
+      status: 'pending',
+    }).lean();
 
-    return res.redirect(backTo(parts.join(' · ')));
+    return decideRequests(req, res, requests, action);
   } catch (err) {
     return next(err);
   }

@@ -8,7 +8,15 @@
       </div>
       <span class="stat-ico"><%- icon('box', 18) %></span>
     </div>
-    <p class="stat-note"><%= formatMoney(stats.totalValue) %> on the register</p>
+    <p class="stat-note">
+      <% if (stats.pricedItems === 0 && stats.totalItems > 0) { %>
+        <span class="warn">No prices recorded yet</span>
+      <% } else { %>
+        <%= formatMoney(stats.totalValue) %> on the register<% if (stats.unpricedItems > 0) { %>
+          · <span class="warn"><%= stats.unpricedItems %> unpriced</span>
+        <% } %>
+      <% } %>
+    </p>
   </div>
 
   <div class="stat tone-green">
@@ -31,6 +39,9 @@
       <span class="stat-ico"><%- icon('clock', 18) %></span>
     </div>
     <span class="stat-pct"><%= stats.assignedPct %>%</span>
+    <% if (stats.overdueItems > 0) { %>
+      <p class="stat-note"><span class="danger"><%= stats.overdueItems %> overdue</span></p>
+    <% } %>
   </div>
 
   <div class="stat tone-red">
@@ -58,6 +69,18 @@
   if (stats.pendingTotal > 0) {
     todo.push({ href: '/admin/requests', label: stats.pendingTotal + ' equipment request' + (stats.pendingTotal === 1 ? '' : 's') + ' to decide' });
   }
+  if (stats.overdueItems > 0) {
+    // First in the list on purpose: an overdue item is the only one of these
+    // that is already going wrong rather than merely waiting
+    todo.push({
+      href: '/admin/products?status=overdue',
+      label:
+        stats.overdueItems +
+        ' item' + (stats.overdueItems === 1 ? '' : 's') +
+        ' overdue — past the time the holder said',
+      urgent: true,
+    });
+  }
   if (stats.pendingCheckIns > 0) {
     // Kept separate from the request count: these are items sitting off the
     // shelf, which is a different kind of waiting and a more urgent one
@@ -76,10 +99,18 @@
     todo.push({ href: '/admin/products?status=maintenance', label: stats.maintenanceItems + ' item' + (stats.maintenanceItems === 1 ? '' : 's') + ' in maintenance' });
   }
 %>
+<%
+  /* The banner turns red when something in it has already gone wrong, rather
+     than merely being unattended — an overdue item is a different kind of
+     news from three requests waiting, and shading them the same makes the
+     urgent one easy to skim past. */
+  var urgent = todo.some(function (t) { return t.urgent; });
+%>
 <% if (todo.length) { %>
-  <div class="alert alert-warn" style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center">
-    <b>Waiting on you:</b>
-    <% todo.forEach(function (t, i) { %>
+  <div class="alert <%= urgent ? 'alert-error' : 'alert-warn' %>"
+       style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center">
+    <b><%= urgent ? 'Needs attention:' : 'Waiting on you:' %></b>
+    <% todo.forEach(function (t) { %>
       <a href="<%= t.href %>" style="text-decoration: underline; font-weight: 600"><%= t.label %></a>
     <% }); %>
   </div>
@@ -164,7 +195,7 @@
       <div class="table-wrap">
         <table class="table">
           <thead>
-            <tr><th>Item</th><th>Person</th><th>Taken</th><th>Status</th></tr>
+            <tr><th>Item</th><th>Person</th><th>Taken</th><th>Submitted</th><th>Accepted</th><th>Status</th></tr>
           </thead>
           <tbody>
             <% todayLogs.forEach(function (l) { %>
@@ -175,11 +206,14 @@
                 </td>
                 <td><%= l.userName %></td>
                 <td><%= formatTime(l.occupiedAt) %></td>
+                <%- include('partials/return-cells', { log: l }) %>
                 <td>
                   <% if (l.returnedAt) { %>
                     <span class="badge badge-green">Returned</span>
+                  <% } else if (l.submittedAt) { %>
+                    <span class="badge badge-purple">Awaiting approval</span>
                   <% } else { %>
-                    <span class="badge badge-amber">Out</span>
+                    <span class="badge badge-amber">Occupied</span>
                   <% } %>
                 </td>
               </tr>

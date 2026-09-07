@@ -22,15 +22,32 @@
             <span class="asset-tag"><%= r.assetTag %></span> <%= r.locationName || '' %>
           </span>
           <span class="panel-row-sub">
-            <%= r.userName %> · <%= formatWhen(r.occupiedAt) %>
+            <%= r.userName %> · taken <%= formatWhen(r.occupiedAt) %>
           </span>
+          <% if (r.submittedAt) { %>
+            <span class="panel-row-sub">
+              Submitted <%= formatWhen(r.submittedAt) %><%= r.submitRemark ? ' · “' + r.submitRemark + '”' : '' %>
+            </span>
+          <% } %>
+          <% if (r.returnedAt) { %>
+            <span class="panel-row-sub">
+              Accepted <%= formatWhen(r.returnedAt) %><%= r.acceptRemark ? ' · “' + r.acceptRemark + '”' : '' %>
+            </span>
+          <% } %>
         </span>
         <span class="panel-row-actions">
           <% if (r.returnedAt) { %>
             <span class="badge badge-green">Returned</span>
             <span class="panel-row-sub"><%= formatDuration(r.durationMinutes) %></span>
+          <% } else if (r.submittedAt) { %>
+            <span class="badge badge-purple">Awaiting approval</span>
+            <span class="panel-row-sub"><%= formatSince(r.occupiedAt) %></span>
           <% } else { %>
-            <span class="badge badge-amber">Still out</span>
+            <% if (isOverdue(r)) { %>
+      <span class="badge badge-red">Overdue <%= overdueBy(r) %></span>
+    <% } else { %>
+      <span class="badge badge-amber">Occupied</span>
+    <% } %>
             <span class="panel-row-sub"><%= formatSince(r.occupiedAt) %></span>
           <% } %>
         </span>

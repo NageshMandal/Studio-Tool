@@ -1,6 +1,6 @@
 const UsageLog = require('../models/UsageLog');
 const User = require('../models/User');
-const { resolveRange, shiftRange, rangeQuery, todayKey } = require('../utils/format');
+const { resolveRange, shiftRange, rangeQuery, todayKey, searchRegex } = require('../utils/format');
 
 /**
  * The usage log for one studio, over a chosen period.
@@ -33,13 +33,14 @@ exports.daily = async (req, res, next) => {
 
     if (staff) filter.user = staff;
 
-    if (q) {
+    const rx = searchRegex(q);
+    if (rx) {
       filter.$and = [
         {
           $or: [
-            { productName: new RegExp(q, 'i') },
-            { assetTag: new RegExp(q, 'i') },
-            { userName: new RegExp(q, 'i') },
+            { productName: rx },
+            { assetTag: rx },
+            { userName: rx },
           ],
         },
       ];

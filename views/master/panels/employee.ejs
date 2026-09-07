@@ -49,12 +49,26 @@
       <li class="panel-row">
         <span class="panel-row-main">
           <b><%= h.productName %></b>
-          <span class="panel-row-sub"><%= formatWhen(h.occupiedAt) %> · <%= h.locationName || '' %></span>
+          <span class="panel-row-sub">Taken <%= formatWhen(h.occupiedAt) %> · <%= h.locationName || '' %></span>
+          <% if (h.submittedAt) { %>
+            <span class="panel-row-sub">Submitted <%= formatWhen(h.submittedAt) %></span>
+          <% } %>
+          <% if (h.returnedAt) { %>
+            <span class="panel-row-sub">Accepted <%= formatWhen(h.returnedAt) %></span>
+          <% } %>
         </span>
         <span class="panel-row-actions">
-          <span class="badge <%= h.returnedAt ? 'badge-green' : 'badge-amber' %>">
-            <%= h.returnedAt ? 'Returned' : 'Still out' %>
-          </span>
+          <% if (h.returnedAt) { %>
+            <span class="badge badge-green">Returned</span>
+          <% } else if (h.submittedAt) { %>
+            <span class="badge badge-purple">Awaiting approval</span>
+          <% } else { %>
+            <% if (isOverdue(h)) { %>
+      <span class="badge badge-red">Overdue <%= overdueBy(h) %></span>
+    <% } else { %>
+      <span class="badge badge-amber">Occupied</span>
+    <% } %>
+          <% } %>
         </span>
       </li>
     <% }); %>
